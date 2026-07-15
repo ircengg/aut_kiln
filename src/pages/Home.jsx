@@ -1,9 +1,12 @@
 import { AppShell, Group, Text } from '@mantine/core';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
+import BoilerNavigator from '../components/BoilerNavigator';
 import Sidebar from '../components/Sidebar';
+import WelcomeExperience from '../components/WelcomeExperience';
 import WallViewer from '../components/WallViewer';
 import {
+  appViewAtom,
   hoverCellAtom,
   inspectionsAtom,
   selectedInspectionAtom,
@@ -20,6 +23,7 @@ function Home() {
   const selectedInspection = useAtomValue(selectedInspectionAtom);
   const selectedWall = useAtomValue(selectedWallAtom);
   const hoverCell = useAtomValue(hoverCellAtom);
+  const appView = useAtomValue(appViewAtom);
   const loadedRef = useRef(false);
   const inspection = inspections.find((item) => item.id === selectedInspection) || null;
 
@@ -32,6 +36,22 @@ function Home() {
       setSelectedInspection(loadedInspections[0]?.id || null);
     });
   }, [setInspections, setSelectedInspection]);
+
+  if (appView === 'welcome') {
+    return (
+      <main className="full-page-shell">
+        <WelcomeExperience inspections={inspections} />
+      </main>
+    );
+  }
+
+  if (appView === 'boiler') {
+    return (
+      <main className="full-page-shell">
+        <BoilerNavigator />
+      </main>
+    );
+  }
 
   return (
     <AppShell

@@ -1,27 +1,53 @@
-import { NavLink, ScrollArea, Stack, Text, Title } from '@mantine/core';
+import { Group, NavLink, ScrollArea, Stack, Switch, Text, Title } from '@mantine/core';
 import { useAtom } from 'jotai';
 import {
   inspectionsAtom,
   selectedInspectionAtom,
   selectedWallAtom,
+  soundEnabledAtom,
   WALL_LABELS,
   WALLS,
 } from '../state/inspectionAtoms';
+import { playUiSound } from '../utils/sound';
 import ColorLegend from './ColorLegend';
 
 function Sidebar() {
   const [inspections] = useAtom(inspectionsAtom);
   const [selectedInspection, setSelectedInspection] = useAtom(selectedInspectionAtom);
   const [selectedWall, setSelectedWall] = useAtom(selectedWallAtom);
+  const [soundEnabled, setSoundEnabled] = useAtom(soundEnabledAtom);
 
   return (
     <Stack gap="md" h="100%">
       <div>
-        <Title order={3}>AUT Viewer</Title>
+        <div className="brand-lockup">
+          <img src="/irc logo.png" alt="IRC Engineering logo" className="brand-logo" />
+          <div>
+            <Title order={3}>IRC Engineering</Title>
+            <Text size="xs" c="dimmed">
+              AUT Command
+            </Text>
+          </div>
+        </div>
         <Text size="xs" c="dimmed">
-          Loaded from project data folder
+          Boiler wall intelligence
         </Text>
       </div>
+
+      <Group justify="space-between" className="sound-toggle">
+        <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+          Sound
+        </Text>
+        <Switch
+          size="xs"
+          checked={soundEnabled}
+          onChange={(event) => {
+            const enabled = event.currentTarget.checked;
+            setSoundEnabled(enabled);
+            playUiSound('select', enabled);
+          }}
+        />
+      </Group>
 
       <ScrollArea flex={1} offsetScrollbars>
         <Stack gap="xs">
@@ -39,7 +65,10 @@ function Sidebar() {
                 label={inspection.inspectionName}
                 description={inspection.inspectionDate || inspection.fileName}
                 active={selectedInspection === inspection.id}
-                onClick={() => setSelectedInspection(inspection.id)}
+                onClick={() => {
+                  playUiSound('select', soundEnabled);
+                  setSelectedInspection(inspection.id);
+                }}
               />
             ))
           )}
@@ -52,7 +81,10 @@ function Sidebar() {
               key={wall}
               label={WALL_LABELS[wall]}
               active={selectedWall === wall}
-              onClick={() => setSelectedWall(wall)}
+              onClick={() => {
+                playUiSound('select', soundEnabled);
+                setSelectedWall(wall);
+              }}
             />
           ))}
         </Stack>

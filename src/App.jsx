@@ -4,7 +4,7 @@ import './App.css';
 
 function App() {
   return (
-    <MantineProvider defaultColorScheme="auto">
+    <MantineProvider defaultColorScheme="dark">
       <Home />
     </MantineProvider>
   );

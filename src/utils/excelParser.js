@@ -86,11 +86,14 @@ function parseWallSheet(workbook, wall) {
   if (!rows.length) {
     return {
       tubeCount: 0,
+      dataTubeCount: 0,
+      declaredTubeCount: null,
       tubeLength: null,
       tubePitch: null,
       tubeDiameter: null,
       tubeNominal: null,
       elevations: [],
+      tubeNumbers: [],
       values: new Float32Array(0),
       width: 0,
       height: 0,
@@ -135,11 +138,14 @@ function parseWallSheet(workbook, wall) {
 
   return {
     tubeCount,
+    dataTubeCount: tubeCount,
+    declaredTubeCount: null,
     tubeLength: null,
     tubePitch: null,
     tubeDiameter: null,
     tubeNominal: null,
     elevations,
+    tubeNumbers,
     values: flatValues,
     width: tubeCount,
     height: elevations.length,
@@ -183,6 +189,8 @@ export async function parseInspection(source) {
         {
           ...parsedWall,
           tubeCount: wallDetails.tubeCount || parsedWall.tubeCount,
+          dataTubeCount: parsedWall.dataTubeCount || parsedWall.tubeCount || wallDetails.tubeCount,
+          declaredTubeCount: wallDetails.tubeCount || parsedWall.tubeCount,
           tubeLength: wallDetails.tubeLength,
           tubePitch: wallDetails.tubePitch,
           tubeDiameter: wallDetails.tubeDiameter,

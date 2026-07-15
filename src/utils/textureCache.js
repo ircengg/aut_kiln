@@ -1,9 +1,11 @@
 import { Texture } from 'pixi.js';
+import { getElevationBands } from './elevationBands';
 import { getThicknessRgba } from './heatmap';
 import { getDisplayValue } from './measurements';
 
 const textureCache = new Map();
 const SLOT_PIXELS = 10;
+const MAX_TEXTURE_HEIGHT = 8192;
 const MUTED_COLOR = [188, 194, 202, 140];
 const WALL_LOSS_COLORS = {
   low: [0, 255, 0, 255],
@@ -30,14 +32,38 @@ function getScaleRange(wallData, mode, displayRange) {
   return { min: wallData.min, max: wallData.max };
 }
 
+function getTextureHeight(wallData) {
+  const elevations = wallData.elevations || [];
+  const tubeLength = wallData.tubeLength || Math.max(...elevations, 1);
+  let minStep = Infinity;
+
+  for (let index = 1; index < elevations.length; index += 1) {
+    const step = Math.abs(elevations[index] - elevations[index - 1]);
+    if (step > 0) minStep = Math.min(minStep, step);
+  }
+
+  if (!Number.isFinite(minStep)) return Math.max(elevations.length, 1);
+
+  return Math.min(
+    MAX_TEXTURE_HEIGHT,
+    Math.max(elevations.length, Math.ceil(tubeLength / minStep)),
+  );
+}
+
 function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
-  const tubeCount = Math.max(wallData.tubeCount || 1, 1);
+  const tubeCount = Math.max(wallData.tubeCount || wallData.dataTubeCount || 1, 1);
+  const dataTubeCount = Math.max(wallData.dataTubeCount || wallData.tubeNumbers?.length || tubeCount, 1);
+  const tubeNumbers = wallData.tubeNumbers?.length
+    ? wallData.tubeNumbers
+    : Array.from({ length: dataTubeCount }, (_, index) => index + 1);
   const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
   const diameter = Math.min(wallData.tubeDiameter || pitch * 0.72, pitch * 0.92);
   const tubePixels = Math.max(1, Math.round((diameter / pitch) * SLOT_PIXELS));
   const tubeOffset = Math.max(0, Math.floor((SLOT_PIXELS - tubePixels) / 2));
   const width = tubeCount * SLOT_PIXELS;
-  const height = Math.max(wallData.height || wallData.elevations?.length || 1, 1);
+  const height = getTextureHeight(wallData);
+  const tubeLength = wallData.tubeLength || Math.max(...(wallData.elevations || [1]), 1);
+  const elevationBands = getElevationBands(wallData);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -50,10 +76,22 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
   const imageData = new ImageData(width, height);
   const scaleRange = getScaleRange(wallData, mode, displayRange);
 
-  for (let rowIndex = 0; rowIndex < height; rowIndex += 1) {
-    for (let tubeIndex = 0; tubeIndex < tubeCount; tubeIndex += 1) {
+  for (let rowIndex = 0; rowIndex < elevationBands.length; rowIndex += 1) {
+    const band = elevationBands[rowIndex];
+    const yStart = Math.max(0, Math.floor(height - (band.upper / tubeLength) * height));
+    const yEnd = Math.min(
+      height,
+      Math.max(yStart + 1, Math.ceil(height - (band.lower / tubeLength) * height)),
+    );
+
+    for (let dataTubeIndex = 0; dataTubeIndex < dataTubeCount; dataTubeIndex += 1) {
+      const tubeNumber = tubeNumbers[dataTubeIndex];
+      const tubeIndex = Number.isFinite(tubeNumber) ? tubeNumber - 1 : dataTubeIndex;
+
+      if (tubeIndex < 0 || tubeIndex >= tubeCount) continue;
+
       const value = getDisplayValue(
-        wallData.values[rowIndex * tubeCount + tubeIndex],
+        wallData.values[rowIndex * dataTubeCount + dataTubeIndex],
         mode,
         wallData.tubeNominal,
       );
@@ -66,15 +104,17 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
           ? getWallLossColor(value)
           : getThicknessRgba(value, scaleRange.min, scaleRange.max)
         : MUTED_COLOR;
-      const textureRow = height - 1 - rowIndex;
 
       for (let tubePixel = 0; tubePixel < tubePixels; tubePixel += 1) {
         const x = tubeIndex * SLOT_PIXELS + tubeOffset + tubePixel;
-        const offset = (textureRow * width + x) * 4;
-        imageData.data[offset] = red;
-        imageData.data[offset + 1] = green;
-        imageData.data[offset + 2] = blue;
-        imageData.data[offset + 3] = alpha;
+
+        for (let y = yStart; y < yEnd; y += 1) {
+          const offset = (y * width + x) * 4;
+          imageData.data[offset] = red;
+          imageData.data[offset + 1] = green;
+          imageData.data[offset + 2] = blue;
+          imageData.data[offset + 3] = alpha;
+        }
       }
     }
   }
