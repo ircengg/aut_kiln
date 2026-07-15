@@ -1,0 +1,63 @@
+.app-shell {
+  min-height: 100svh;
+}
+
+.canvas-panel {
+  height: calc(100svh - 32px - 34px);
+  overflow: hidden;
+  position: relative;
+}
+
+.toolbar {
+  min-height: 42px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.toolbar-range {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.pixi-stage {
+  position: relative;
+  height: calc(100% - 42px);
+  cursor: grab;
+  touch-action: none;
+}
+
+.pixi-stage:active {
+  cursor: grabbing;
+}
+
+.pixi-stage canvas {
+  display: block;
+}
+
+.canvas-tooltip {
+  pointer-events: none;
+  position: fixed;
+  z-index: 1000;
+  max-width: 240px;
+}
+
+.sidebar-legend {
+  padding-top: 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto;
+}
