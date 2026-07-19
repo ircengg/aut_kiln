@@ -1,6 +1,7 @@
 import { Texture } from 'pixi.js';
 import { getElevationBands } from './elevationBands';
 import { getThicknessRgba } from './heatmap';
+import { isHorizontalLayout } from './layout';
 import { getDisplayValue } from './measurements';
 
 const textureCache = new Map();
@@ -57,11 +58,13 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
     ? wallData.tubeNumbers
     : Array.from({ length: dataTubeCount }, (_, index) => index + 1);
   const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
+  const isHorizontal = isHorizontalLayout(wallData.layout);
   const diameter = Math.min(wallData.tubeDiameter || pitch * 0.72, pitch * 0.92);
   const tubePixels = Math.max(1, Math.round((diameter / pitch) * SLOT_PIXELS));
   const tubeOffset = Math.max(0, Math.floor((SLOT_PIXELS - tubePixels) / 2));
-  const width = tubeCount * SLOT_PIXELS;
-  const height = getTextureHeight(wallData);
+  const lengthPixels = getTextureHeight(wallData);
+  const width = isHorizontal ? lengthPixels : tubeCount * SLOT_PIXELS;
+  const height = isHorizontal ? tubeCount * SLOT_PIXELS : lengthPixels;
   const tubeLength = wallData.tubeLength || Math.max(...(wallData.elevations || [1]), 1);
   const elevationBands = getElevationBands(wallData);
   const canvas = document.createElement('canvas');
@@ -78,10 +81,10 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
 
   for (let rowIndex = 0; rowIndex < elevationBands.length; rowIndex += 1) {
     const band = elevationBands[rowIndex];
-    const yStart = Math.max(0, Math.floor(height - (band.upper / tubeLength) * height));
-    const yEnd = Math.min(
-      height,
-      Math.max(yStart + 1, Math.ceil(height - (band.lower / tubeLength) * height)),
+    const lengthStart = Math.max(0, Math.floor((band.lower / tubeLength) * lengthPixels));
+    const lengthEnd = Math.min(
+      lengthPixels,
+      Math.max(lengthStart + 1, Math.ceil((band.upper / tubeLength) * lengthPixels)),
     );
 
     for (let dataTubeIndex = 0; dataTubeIndex < dataTubeCount; dataTubeIndex += 1) {
@@ -106,9 +109,11 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
         : MUTED_COLOR;
 
       for (let tubePixel = 0; tubePixel < tubePixels; tubePixel += 1) {
-        const x = tubeIndex * SLOT_PIXELS + tubeOffset + tubePixel;
+        const tubeSlotPixel = tubeIndex * SLOT_PIXELS + tubeOffset + tubePixel;
 
-        for (let y = yStart; y < yEnd; y += 1) {
+        for (let lengthPixel = lengthStart; lengthPixel < lengthEnd; lengthPixel += 1) {
+          const x = isHorizontal ? lengthPixel : tubeSlotPixel;
+          const y = isHorizontal ? tubeSlotPixel : height - 1 - lengthPixel;
           const offset = (y * width + x) * 4;
           imageData.data[offset] = red;
           imageData.data[offset + 1] = green;
@@ -130,7 +135,7 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
 export function getWallTexture(inspectionId, wallName, wallData, focusRange, mode, displayRange) {
   const min = focusRange?.min;
   const max = focusRange?.max;
-  const key = `${inspectionId}:${wallName}:${mode}:${displayRange?.min}:${displayRange?.max}:${min}:${max}`;
+  const key = `${inspectionId}:${wallName}:${wallData?.dataKey || 'all'}:${wallData?.layout || 'vertical'}:${wallData?.tubeCount}:${wallData?.tubeLength}:${mode}:${displayRange?.min}:${displayRange?.max}:${min}:${max}`;
   const cached = textureCache.get(key);
 
   if (cached) return cached;

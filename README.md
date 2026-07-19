@@ -1,16 +1,56 @@
-# React + Vite
+# GMR Static Project Host
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This repo contains a static tube thickness viewer plus a lightweight FastAPI host for multiple projects.
 
-Currently, two official plugins are available:
+## Project Layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Each hosted project lives under `projects/`:
 
-## React Compiler
+```text
+projects/
+  P_11111111111111/
+    Inspection-001.xlsx
+    image-or-video-files.ext
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+All Excel, drawing, image, and video files should be placed directly inside the project's `/` folder.
+The shared React viewer is built from `frontend/` and served for every `/p/{project_id}/` URL.
 
-## Expanding the Oxlint configuration
+## Run
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```powershell
+cd frontend
+pnpm install
+pnpm run build
+cd ..
+uv venv
+uv sync
+uv run uvicorn server:app --host 0.0.0.0 --port 8127 --reload
+```
+
+Open:
+
+```text
+http://127.0.0.1:8127/
+http://127.0.0.1:8127/p/P_11111111111111/
+http://127.0.0.1:8127/ircengg
+```
+
+The `/ircengg` route is a simple no-auth admin page for listing projects and uploading a new project ZIP with client/project details.
+
+## Docker
+
+Build and run directly:
+
+```powershell
+docker build -t gmr-project-host .
+docker run --name gmr-project-host -p 8127:8127 -v ${PWD}/projects:/app/projects gmr-project-host
+```
+
+Or run with Compose:
+
+```powershell
+docker compose up -d --build
+```
+
+Uploaded projects are stored in `./projects` on the host through the Docker volume mount.

@@ -1,17 +1,17 @@
-import { Button, Group, Paper, Text, Title } from '@mantine/core';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { appViewAtom, soundEnabledAtom } from '../state/inspectionAtoms';
-import { playUiSound } from '../utils/sound';
+import { Button, Group, Paper, Text, Title } from "@mantine/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { appViewAtom, soundEnabledAtom } from "../state/inspectionAtoms";
+import { playUiSound } from "../utils/sound";
 
-const steps = ['Boiler', 'AUT Inspection', 'Wall Selection', 'Thickness Map'];
+const steps = ["Boiler", "AUT Inspection", "Wall Selection", "Thickness Map"];
 
 function WelcomeExperience({ inspections }) {
   const setView = useSetAtom(appViewAtom);
   const soundEnabled = useAtomValue(soundEnabledAtom);
 
   const enterBoiler = () => {
-    playUiSound('launch', soundEnabled);
-    setView('boiler');
+    playUiSound("launch", soundEnabled);
+    setView("boiler");
   };
 
   return (
@@ -20,16 +20,20 @@ function WelcomeExperience({ inspections }) {
         <Text size="xs" fw={700} tt="uppercase" className="signal-text">
           AUT Waterwall Console
         </Text>
-        <Title className="welcome-title">Boiler intelligence, live on the wall.</Title>
+        <Title className="welcome-title">
+          Boiler intelligence, live on the wall.
+        </Title>
         <Text className="welcome-subtitle">
-          Select an inspection, enter the boiler, choose a wall, then launch the GPU heatmap.
+          Select an inspection, enter the boiler, choose a wall, then launch the
+          tubes visualization.
         </Text>
         <Group gap="sm">
           <Button size="md" onClick={enterBoiler} className="primary-action">
             Enter Boiler
           </Button>
           <Text size="sm" c="dimmed">
-            {inspections.length} inspection workbook{inspections.length === 1 ? '' : 's'} loaded
+            {inspections.length} inspection workbook
+            {inspections.length === 1 ? "" : "s"} loaded
           </Text>
         </Group>
       </div>

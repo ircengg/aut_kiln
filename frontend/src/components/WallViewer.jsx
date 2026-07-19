@@ -6,12 +6,17 @@ import {
   colorRangeAtom,
   displayModeAtom,
   panAtom,
+  selectedCellAtom,
+  selectedCoilAtom,
   selectedWallAtom,
   zoomAtom,
 } from '../state/inspectionAtoms';
 import { fitViewToSize, getWallBounds } from '../utils/fitView';
 import { getDisplayRange } from '../utils/measurements';
 import { getCorrodedAreas } from '../utils/corrosionFocus';
+import { getSectionDataForCoil } from '../utils/excelParser';
+import { isHorizontalLayout } from '../utils/layout';
+import ObservationsModal from './ObservationsModal';
 import PixiCanvas from './PixiCanvas';
 import Toolbar from './Toolbar';
 
@@ -20,12 +25,15 @@ const easeOutCubic = (value) => 1 - (1 - value) ** 3;
 function WallViewer({ inspection }) {
   const { ref, width, height } = useElementSize();
   const selectedWall = useAtomValue(selectedWallAtom);
+  const [selectedCoil, setSelectedCoil] = useAtom(selectedCoilAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [pan, setPan] = useAtom(panAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
+  const [, setSelectedCell] = useAtom(selectedCellAtom);
   const [displayMode, setDisplayMode] = useAtom(displayModeAtom);
   const [focusIndex, setFocusIndex] = useState(-1);
   const [isFocusPlaying, setIsFocusPlaying] = useState(false);
+  const [observationsOpened, setObservationsOpened] = useState(false);
   const cameraFrameRef = useRef(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
@@ -33,13 +41,28 @@ function WallViewer({ inspection }) {
     () => inspection?.walls?.[selectedWall] || {},
     [inspection, selectedWall],
   );
-  const wallData = useMemo(
+  const rawWallData = useMemo(
     () => inspection?.wallData?.[selectedWall],
     [inspection, selectedWall],
+  );
+  const wallData = useMemo(
+    () => getSectionDataForCoil(rawWallData, selectedCoil),
+    [rawWallData, selectedCoil],
+  );
+  const isHorizontal = isHorizontalLayout(wallData?.layout);
+  const coilOptions = useMemo(
+    () =>
+      rawWallData?.coilNumbers?.map((coilNumber) => ({
+        value: String(coilNumber),
+        label: `Coil ${coilNumber}`,
+      })) || [],
+    [rawWallData?.coilNumbers],
   );
   const bounds = useMemo(() => getWallBounds(wallConfig, wallData), [wallConfig, wallData]);
   const displayRange = useMemo(() => getDisplayRange(wallData, displayMode), [displayMode, wallData]);
   const focusAreas = useMemo(() => getCorrodedAreas(wallData), [wallData]);
+  const observations = wallData?.observations || [];
+  const criticalObservationCount = observations.filter((item) => item.isCritical).length;
   const focusedArea = focusIndex >= 0 ? focusAreas[focusIndex] : null;
   const canvasHeight = Math.max(height - 42, 1);
   const size = { width, height: canvasHeight };
@@ -53,20 +76,36 @@ function WallViewer({ inspection }) {
   }, [pan]);
 
   useEffect(() => {
+    if (!rawWallData?.hasCoils) {
+      if (selectedCoil !== null) setSelectedCoil(null);
+      return;
+    }
+
+    const nextCoil = rawWallData.coilNumbers?.includes(Number(selectedCoil))
+      ? selectedCoil
+      : rawWallData.coilNumbers?.[0];
+
+    if (nextCoil !== selectedCoil) {
+      setSelectedCoil(nextCoil ?? null);
+    }
+  }, [rawWallData, selectedCoil, setSelectedCoil]);
+
+  useEffect(() => {
     if (!inspection || !wallData?.values?.length || !width || !canvasHeight) return;
     const next = fitViewToSize(bounds, { width, height: canvasHeight });
     setZoom(next.zoom);
     setPan(next.pan);
-  }, [bounds, canvasHeight, inspection, selectedWall, setPan, setZoom, wallData?.values?.length, width]);
+  }, [bounds, canvasHeight, inspection, selectedWall, setPan, setZoom, wallData?.dataKey, wallData?.values?.length, width]);
 
   useEffect(() => {
     setColorRange({ min: displayRange.min, max: displayRange.max });
-  }, [displayMode, displayRange.max, displayRange.min, inspection?.id, selectedWall, setColorRange]);
+  }, [displayMode, displayRange.max, displayRange.min, inspection?.id, selectedCoil, selectedWall, setColorRange]);
 
   useEffect(() => {
     setFocusIndex(-1);
     setIsFocusPlaying(false);
-  }, [inspection?.id, selectedWall]);
+    setSelectedCell(null);
+  }, [inspection?.id, selectedCoil, selectedWall, setSelectedCell]);
 
   useEffect(() => {
     if (!isFocusPlaying || !focusAreas.length) return undefined;
@@ -89,8 +128,10 @@ function WallViewer({ inspection }) {
     setColorRange({ min: 20, max: Math.max(displayRange.max ?? focusedArea.maxWallLoss, 20.001) });
 
     const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
-    const areaWidth = Math.max((focusedArea.maxTube - focusedArea.minTube + 1) * pitch, pitch);
-    const areaHeight = Math.max(focusedArea.maxUpper - focusedArea.minLower, pitch);
+    const tubeAreaSpan = Math.max((focusedArea.maxTube - focusedArea.minTube + 1) * pitch, pitch);
+    const elevationAreaSpan = Math.max(focusedArea.maxUpper - focusedArea.minLower, pitch);
+    const areaWidth = isHorizontal ? elevationAreaSpan : tubeAreaSpan;
+    const areaHeight = isHorizontal ? tubeAreaSpan : elevationAreaSpan;
     const targetZoom = Math.min(
       18,
       Math.max(
@@ -98,8 +139,12 @@ function WallViewer({ inspection }) {
         Math.min(width / (areaWidth * 3.2), canvasHeight / (areaHeight * 5.4)),
       ),
     );
-    const centerX = ((focusedArea.minTube + focusedArea.maxTube) / 2 - 0.5) * pitch;
-    const centerY = bounds.height - focusedArea.centerElevation;
+    const centerX = isHorizontal
+      ? focusedArea.centerElevation
+      : ((focusedArea.minTube + focusedArea.maxTube) / 2 - 0.5) * pitch;
+    const centerY = isHorizontal
+      ? ((focusedArea.minTube + focusedArea.maxTube) / 2 - 0.5) * pitch
+      : bounds.height - focusedArea.centerElevation;
     const targetPan = {
       x: width / 2 - centerX * targetZoom,
       y: canvasHeight / 2 - centerY * targetZoom,
@@ -137,6 +182,7 @@ function WallViewer({ inspection }) {
     displayMode,
     displayRange.max,
     focusedArea,
+    isHorizontal,
     setColorRange,
     setDisplayMode,
     setPan,
@@ -177,9 +223,19 @@ function WallViewer({ inspection }) {
   if (!wallData?.values?.length) {
     return (
       <Paper ref={ref} className="canvas-panel" withBorder>
-        <Toolbar bounds={bounds} size={size} displayRange={displayRange} />
+        <Toolbar
+          bounds={bounds}
+          size={size}
+          displayRange={displayRange}
+          coilOptions={coilOptions}
+          selectedCoil={selectedCoil}
+          onCoilChange={setSelectedCoil}
+          observations={observations}
+          criticalObservationCount={criticalObservationCount}
+          onOpenObservations={() => setObservationsOpened(true)}
+        />
         <Center h="calc(100% - 42px)">
-          <Text c="dimmed">No sheet data found for this wall.</Text>
+          <Text c="dimmed">No sheet data found for this component.</Text>
         </Center>
       </Paper>
     );
@@ -198,6 +254,12 @@ function WallViewer({ inspection }) {
         onFocusNext={showNextFocus}
         onFocusPrevious={showPreviousFocus}
         onFocusPlay={toggleFocusPlay}
+        coilOptions={coilOptions}
+        selectedCoil={selectedCoil}
+        onCoilChange={setSelectedCoil}
+        observations={observations}
+        criticalObservationCount={criticalObservationCount}
+        onOpenObservations={() => setObservationsOpened(true)}
       />
       <PixiCanvas
         inspection={inspection}
@@ -208,6 +270,12 @@ function WallViewer({ inspection }) {
         displayMode={displayMode}
         displayRange={displayRange}
         focusedArea={focusedArea}
+      />
+      <ObservationsModal
+        opened={observationsOpened}
+        onClose={() => setObservationsOpened(false)}
+        observations={observations}
+        sectionName={wallData?.name || selectedWall}
       />
     </Paper>
   );

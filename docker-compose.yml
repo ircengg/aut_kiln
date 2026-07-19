@@ -1,0 +1,9 @@
+services:
+  gmr-project-host:
+    build: .
+    container_name: gmr-project-host
+    restart: unless-stopped
+    ports:
+      - "8127:8127"
+    volumes:
+      - ./projects:/app/projects

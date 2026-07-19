@@ -3,6 +3,7 @@ import {
   Group,
   RangeSlider,
   SegmentedControl,
+  Select,
   Text,
   Tooltip,
 } from "@mantine/core";
@@ -30,6 +31,12 @@ function Toolbar({
   onFocusNext,
   onFocusPrevious,
   onFocusPlay,
+  coilOptions = [],
+  selectedCoil = null,
+  onCoilChange,
+  observations = [],
+  criticalObservationCount = 0,
+  onOpenObservations,
 }) {
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
@@ -83,11 +90,16 @@ function Toolbar({
   return (
     <Group justify="space-between" className="toolbar">
       <Group gap="xs">
-        <Tooltip label="Home">
-          <ActionIcon aria-label="Home" size="sm" variant="light" onClick={() => setAppView('welcome')}>
+        {/* <Tooltip label="Home">
+          <ActionIcon
+            aria-label="Home"
+            size="sm"
+            variant="light"
+            onClick={() => setAppView("welcome")}
+          >
             ⌂
           </ActionIcon>
-        </Tooltip>
+        </Tooltip> */}
         <SegmentedControl
           size="xs"
           value={displayMode}
@@ -97,6 +109,19 @@ function Toolbar({
             { label: "Thickness", value: "thickness" },
           ]}
         />
+        {coilOptions.length > 0 && (
+          <Select
+            aria-label="Select coil"
+            size="xs"
+            className="coil-select"
+            data={coilOptions}
+            value={selectedCoil === null ? null : String(selectedCoil)}
+            onChange={(value) =>
+              onCoilChange?.(value === null ? null : Number(value))
+            }
+            allowDeselect={false}
+          />
+        )}
         <Tooltip label="Zoom in">
           <ActionIcon
             aria-label="Zoom in"
@@ -137,6 +162,18 @@ function Toolbar({
             ↺
           </ActionIcon>
         </Tooltip>
+        <Tooltip label="Inspection observations">
+          <ActionIcon
+            aria-label="Inspection observations"
+            size="sm"
+            variant={criticalObservationCount ? "filled" : "light"}
+            color={criticalObservationCount ? "red" : undefined}
+            disabled={!observations.length}
+            onClick={onOpenObservations}
+          >
+            {criticalObservationCount ? "!" : "i"}
+          </ActionIcon>
+        </Tooltip>
         <Group gap={4} className="focus-nav">
           <Tooltip label="Previous corroded area">
             <ActionIcon
@@ -149,9 +186,13 @@ function Toolbar({
               &lt;
             </ActionIcon>
           </Tooltip>
-          <Tooltip label={isFocusPlaying ? "Pause focus scan" : "Play focus scan"}>
+          <Tooltip
+            label={isFocusPlaying ? "Pause focus scan" : "Play focus scan"}
+          >
             <ActionIcon
-              aria-label={isFocusPlaying ? "Pause focus scan" : "Play focus scan"}
+              aria-label={
+                isFocusPlaying ? "Pause focus scan" : "Play focus scan"
+              }
               size="sm"
               variant={isFocusPlaying ? "filled" : "light"}
               disabled={!focusCount}

@@ -12,6 +12,7 @@ export const WALL_LABELS = {
 export const inspectionsAtom = atom([]);
 export const selectedInspectionAtom = atom(null);
 export const selectedWallAtom = atom("FrontWall");
+export const selectedCoilAtom = atom(null);
 export const zoomAtom = atom(1);
 export const panAtom = atom({ x: 0, y: 0 });
 export const hoverCellAtom = atom(null);

@@ -3,29 +3,53 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   appViewAtom,
   inspectionsAtom,
+  selectedCoilAtom,
   selectedInspectionAtom,
   selectedWallAtom,
   soundEnabledAtom,
-  WALL_LABELS,
-  WALLS,
 } from '../state/inspectionAtoms';
 import { playUiSound } from '../utils/sound';
+
+function getWallClass(sectionName) {
+  const name = sectionName.toLowerCase();
+  if (name === 'front wall') return 'boiler-wall-FrontWall';
+  if (name === 'rear wall') return 'boiler-wall-RearWall';
+  if (name === 'left wall') return 'boiler-wall-LeftSideWall';
+  if (name === 'right wall') return 'boiler-wall-RightSideWall';
+  return '';
+}
 
 function BoilerNavigator() {
   const inspections = useAtomValue(inspectionsAtom);
   const [selectedInspection, setSelectedInspection] = useAtom(selectedInspectionAtom);
   const [selectedWall, setSelectedWall] = useAtom(selectedWallAtom);
+  const setSelectedCoil = useSetAtom(selectedCoilAtom);
   const setView = useSetAtom(appViewAtom);
   const soundEnabled = useAtomValue(soundEnabledAtom);
-  const inspectionOptions = inspections.map((inspection) => ({
-    value: inspection.id,
-    label: `${inspection.inspectionName}${inspection.inspectionDate ? ` · ${inspection.inspectionDate}` : ''}`,
+  const inspection = inspections.find((item) => item.id === selectedInspection);
+  const availableSections = inspection?.availableSections || [];
+  const positionedSections = availableSections.filter((section) =>
+    ['front wall', 'rear wall', 'left wall', 'right wall'].includes(section.name.toLowerCase()),
+  );
+  const traySections = availableSections.filter((section) => !positionedSections.includes(section));
+  const inspectionOptions = inspections.map((item) => ({
+    value: item.id,
+    label: `${item.inspectionName}${item.inspectionDate ? ` - ${item.inspectionDate}` : ''}`,
   }));
 
-  const selectWall = (wall) => {
+  const selectSection = (sectionId) => {
     playUiSound('open', soundEnabled);
-    setSelectedWall(wall);
+    setSelectedWall(sectionId);
+    setSelectedCoil(null);
     setView('viewer');
+  };
+
+  const selectInspection = (value) => {
+    playUiSound('click', soundEnabled);
+    setSelectedInspection(value);
+    const nextInspection = inspections.find((item) => item.id === value);
+    setSelectedWall(nextInspection?.availableSections?.[0]?.id || nextInspection?.sections?.[0]?.id || 'FrontWall');
+    setSelectedCoil(null);
   };
 
   return (
@@ -41,7 +65,7 @@ function BoilerNavigator() {
           <Text size="xs" fw={700} tt="uppercase" className="signal-text">
             Boiler Navigation
           </Text>
-          <Title order={1}>Choose the inspection wall.</Title>
+          <Title order={1}>Choose the inspection component.</Title>
         </div>
         <Button variant="light" onClick={() => setView('welcome')}>
           Back Home
@@ -64,16 +88,31 @@ function BoilerNavigator() {
               <span />
               <span />
             </div>
-            {WALLS.map((wall) => (
+            {positionedSections.map((section) => (
               <button
                 type="button"
-                key={wall}
-                className={`boiler-wall boiler-wall-${wall} ${selectedWall === wall ? 'is-active' : ''}`}
-                onClick={() => selectWall(wall)}
+                key={section.id}
+                className={`boiler-wall ${getWallClass(section.name)} ${selectedWall === section.id ? 'is-active' : ''}`}
+                onClick={() => selectSection(section.id)}
               >
-                <span>{WALL_LABELS[wall]}</span>
+                <span>{section.name}</span>
               </button>
             ))}
+            {traySections.length > 0 && (
+              <div className="component-tray">
+                {traySections.map((section) => (
+                  <button
+                    type="button"
+                    key={section.id}
+                    className={`component-chip ${selectedWall === section.id ? 'is-active' : ''}`}
+                    onClick={() => selectSection(section.id)}
+                  >
+                    <span>{section.name}</span>
+                    <small>{section.layout}</small>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="boiler-map-core">
               <div className="core-ring" />
               <div className="core-pulse" />
@@ -93,10 +132,7 @@ function BoilerNavigator() {
               mt="xs"
               data={inspectionOptions}
               value={selectedInspection}
-              onChange={(value) => {
-                playUiSound('click', soundEnabled);
-                setSelectedInspection(value);
-              }}
+              onChange={selectInspection}
               allowDeselect={false}
             />
           </Paper>
@@ -106,7 +142,7 @@ function BoilerNavigator() {
               Back
             </Button>
             <Text size="xs" c="dimmed">
-              Click a boiler wall to launch the heatmap.
+              Click a component with sheet data to launch the heatmap.
             </Text>
           </Group>
         </Stack>

@@ -1,0 +1,11 @@
+.git
+.agents
+.venv
+__pycache__
+*.pyc
+.python-version
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.DS_Store
+Thumbs.db
