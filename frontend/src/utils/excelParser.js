@@ -32,6 +32,23 @@ const toReadingNumber = (value) => {
   return Number.isFinite(number) && number !== 0 ? number : null;
 };
 
+const formatDateParts = (year, month, day) =>
+  `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${year}`;
+
+function formatInspectionDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatDateParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  }
+
+  const serial = Number(value);
+  if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+    const parsed = XLSX.SSF.parse_date_code(serial);
+    if (parsed) return formatDateParts(parsed.y, parsed.m, parsed.d);
+  }
+
+  return String(value ?? '').trim();
+}
+
 const readSheetRows = (workbook, sheetName) => {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
@@ -140,7 +157,8 @@ function parseDetails(workbook) {
     if (!key || value === undefined) return;
 
     if (DETAIL_KEYS[key]) {
-      details[DETAIL_KEYS[key]] = String(value);
+      details[DETAIL_KEYS[key]] =
+        DETAIL_KEYS[key] === 'inspectionDate' ? formatInspectionDate(value) : String(value);
     }
   });
 

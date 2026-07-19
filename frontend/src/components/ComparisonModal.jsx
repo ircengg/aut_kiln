@@ -18,8 +18,23 @@ const CHART_WIDTH = 760;
 const CHART_HEIGHT = 150;
 const CHART_PADDING = 42;
 
-function parseDateValue(value) {
+function formatExcelSerialDate(value) {
+  const serial = Number(value);
+  if (!Number.isFinite(serial) || serial < 20000 || serial > 80000) return null;
+
+  const epoch = Date.UTC(1899, 11, 30);
+  const date = new Date(epoch + serial * 86400000);
+
+  return `${String(date.getUTCDate()).padStart(2, "0")}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${date.getUTCFullYear()}`;
+}
+
+function formatInspectionDate(value) {
   const text = String(value || "").trim();
+  return formatExcelSerialDate(text) || text;
+}
+
+function parseDateValue(value) {
+  const text = formatInspectionDate(value);
   const match = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
 
   if (match) {
@@ -102,7 +117,7 @@ function buildComparisonRows(inspections, selection, selectedCoil, windowSize) {
       return {
         id: inspection.id,
         name: inspection.inspectionName || inspection.fileName || "Inspection",
-        date: inspection.inspectionDate || "",
+        date: formatInspectionDate(inspection.inspectionDate),
         dateValue: parseDateValue(inspection.inspectionDate),
         sourceFile: inspection.fileName,
         ...summary,
