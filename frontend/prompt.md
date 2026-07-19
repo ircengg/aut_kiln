@@ -68,7 +68,7 @@ RightSideWall
 Contains key-value pairs like
 
 ```
-Inspection Details      AUT of Waterwall at GMR
+Inspection Details      AUT of Waterwall
 Inspection Date         15-01-2025
 
 Front Wall Tube Diameter     45

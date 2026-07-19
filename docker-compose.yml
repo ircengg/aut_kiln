@@ -1,10 +1,10 @@
 services:
-  gmr-project-host:
+  aut-boiler:
     build: .
-    container_name: gmr-project-host
+    container_name: aut-boiler
     restart: unless-stopped
     ports:
-      - "8127:8127"
+      - "8130:8127"
     volumes:
       - type: bind
         source: ./projects
@@ -16,7 +16,16 @@ services:
         target: /app/config.json
         read_only: true
     healthcheck:
-      test: ["CMD", "uv", "run", "--no-sync", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8127/health', timeout=3).read()"]
+      test:
+        [
+          "CMD",
+          "uv",
+          "run",
+          "--no-sync",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8127/health', timeout=3).read()",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
