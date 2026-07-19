@@ -7,5 +7,10 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
+projects
+frontend/node_modules
+frontend/src
+frontend/public
+frontend/dist/.vite
 .DS_Store
 Thumbs.db

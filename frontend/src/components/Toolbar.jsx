@@ -36,6 +36,8 @@ function Toolbar({
   observations = [],
   criticalObservationCount = 0,
   onOpenObservations,
+  onOpenComparison,
+  canCompare = false,
   lengthLabel = "Elevation",
 }) {
   const [zoom, setZoom] = useAtom(zoomAtom);
@@ -178,6 +180,17 @@ function Toolbar({
             onClick={onOpenObservations}
           >
             {criticalObservationCount ? "!" : "i"}
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={canCompare ? "Compare selected area" : "Select a tube reading to compare"}>
+          <ActionIcon
+            aria-label="Compare selected area"
+            size="sm"
+            variant={canCompare ? "filled" : "light"}
+            disabled={!canCompare}
+            onClick={onOpenComparison}
+          >
+            C
           </ActionIcon>
         </Tooltip>
         <Group gap={4} className="focus-nav">

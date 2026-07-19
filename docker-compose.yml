@@ -6,4 +6,18 @@ services:
     ports:
       - "8127:8127"
     volumes:
-      - ./projects:/app/projects
+      - type: bind
+        source: ./projects
+        target: /app/projects
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./config.json
+        target: /app/config.json
+        read_only: true
+    healthcheck:
+      test: ["CMD", "uv", "run", "--no-sync", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8127/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

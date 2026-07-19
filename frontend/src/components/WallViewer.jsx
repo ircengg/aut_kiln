@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   colorRangeAtom,
   displayModeAtom,
+  inspectionsAtom,
   panAtom,
   selectedCellAtom,
   selectedCoilAtom,
@@ -16,6 +17,7 @@ import { getDisplayRange } from '../utils/measurements';
 import { getCorrodedAreas } from '../utils/corrosionFocus';
 import { getSectionDataForCoil } from '../utils/excelParser';
 import { isHorizontalLayout } from '../utils/layout';
+import ComparisonModal from './ComparisonModal';
 import ObservationsModal from './ObservationsModal';
 import PixiCanvas from './PixiCanvas';
 import Toolbar from './Toolbar';
@@ -24,16 +26,18 @@ const easeOutCubic = (value) => 1 - (1 - value) ** 3;
 
 function WallViewer({ inspection }) {
   const { ref, width, height } = useElementSize();
+  const inspections = useAtomValue(inspectionsAtom);
   const selectedWall = useAtomValue(selectedWallAtom);
   const [selectedCoil, setSelectedCoil] = useAtom(selectedCoilAtom);
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [pan, setPan] = useAtom(panAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
-  const [, setSelectedCell] = useAtom(selectedCellAtom);
+  const [selectedCell, setSelectedCell] = useAtom(selectedCellAtom);
   const [displayMode, setDisplayMode] = useAtom(displayModeAtom);
   const [focusIndex, setFocusIndex] = useState(-1);
   const [isFocusPlaying, setIsFocusPlaying] = useState(false);
   const [observationsOpened, setObservationsOpened] = useState(false);
+  const [comparisonOpened, setComparisonOpened] = useState(false);
   const cameraFrameRef = useRef(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
@@ -240,6 +244,8 @@ function WallViewer({ inspection }) {
           observations={observations}
           criticalObservationCount={criticalObservationCount}
           onOpenObservations={() => setObservationsOpened(true)}
+          onOpenComparison={() => setComparisonOpened(true)}
+          canCompare={Boolean(selectedCell?.wall === selectedWall)}
           lengthLabel={lengthLabel}
         />
         <Center h="calc(100% - 42px)">
@@ -268,6 +274,8 @@ function WallViewer({ inspection }) {
         observations={observations}
         criticalObservationCount={criticalObservationCount}
         onOpenObservations={() => setObservationsOpened(true)}
+        onOpenComparison={() => setComparisonOpened(true)}
+        canCompare={Boolean(selectedCell?.wall === selectedWall)}
         lengthLabel={lengthLabel}
       />
       <PixiCanvas
@@ -285,6 +293,15 @@ function WallViewer({ inspection }) {
         onClose={() => setObservationsOpened(false)}
         observations={observations}
         sectionName={wallData?.name || selectedWall}
+      />
+      <ComparisonModal
+        opened={comparisonOpened}
+        onClose={() => setComparisonOpened(false)}
+        inspections={inspections}
+        selectedCell={selectedCell?.wall === selectedWall ? selectedCell : null}
+        selectedCoil={selectedCoil}
+        sectionName={wallData?.name || selectedWall}
+        lengthLabel={lengthLabel}
       />
     </Paper>
   );

@@ -11,8 +11,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY server.py ./
+COPY config.json ./
 COPY frontend/dist ./frontend/dist
-COPY projects ./projects
+RUN mkdir -p /app/projects
 
 EXPOSE 8127
 
