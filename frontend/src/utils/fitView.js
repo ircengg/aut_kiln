@@ -4,12 +4,17 @@ export function getWallBounds(wallConfig, wallData) {
   const tubeCount = wallData?.tubeCount || wallConfig?.tubeCount || 1;
   const pitch =
     wallData?.tubePitch || wallConfig?.tubePitch || wallData?.tubeDiameter || wallConfig?.tubeDiameter || 1;
+  const diameter = Math.min(
+    wallData?.tubeDiameter || wallConfig?.tubeDiameter || pitch * 0.72,
+    pitch * 0.92,
+  );
   const length =
     wallData?.tubeLength || wallConfig?.tubeLength || Math.max(...(wallData?.elevations || [1]), 1);
-  const tubeSpan = Math.max(tubeCount * pitch, pitch);
   const tubeLength = Math.max(length, 1);
 
   if (isHorizontalLayout(wallData?.layout || wallConfig?.layout)) {
+    const tubeSpan = Math.max((tubeCount - 1) * pitch + diameter, diameter);
+
     return {
       width: tubeLength,
       height: tubeSpan,
@@ -17,7 +22,7 @@ export function getWallBounds(wallConfig, wallData) {
   }
 
   return {
-    width: tubeSpan,
+    width: Math.max(tubeCount * pitch, pitch),
     height: tubeLength,
   };
 }

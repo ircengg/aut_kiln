@@ -50,6 +50,7 @@ function WallViewer({ inspection }) {
     [rawWallData, selectedCoil],
   );
   const isHorizontal = isHorizontalLayout(wallData?.layout);
+  const lengthLabel = isHorizontal ? 'Distance' : 'Elevation';
   const coilOptions = useMemo(
     () =>
       rawWallData?.coilNumbers?.map((coilNumber) => ({
@@ -129,14 +130,20 @@ function WallViewer({ inspection }) {
 
     const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
     const tubeAreaSpan = Math.max((focusedArea.maxTube - focusedArea.minTube + 1) * pitch, pitch);
-    const elevationAreaSpan = Math.max(focusedArea.maxUpper - focusedArea.minLower, pitch);
+    const elevationAreaSpan = Math.max(
+      focusedArea.kind === 'spot' ? pitch : focusedArea.maxUpper - focusedArea.minLower,
+      pitch,
+    );
     const areaWidth = isHorizontal ? elevationAreaSpan : tubeAreaSpan;
     const areaHeight = isHorizontal ? tubeAreaSpan : elevationAreaSpan;
     const targetZoom = Math.min(
       18,
       Math.max(
         0.05,
-        Math.min(width / (areaWidth * 3.2), canvasHeight / (areaHeight * 5.4)),
+        Math.min(
+          width / (areaWidth * (focusedArea.kind === 'spot' ? 7.2 : 3.2)),
+          canvasHeight / (areaHeight * (focusedArea.kind === 'spot' ? 7.2 : 5.4)),
+        ),
       ),
     );
     const centerX = isHorizontal
@@ -233,6 +240,7 @@ function WallViewer({ inspection }) {
           observations={observations}
           criticalObservationCount={criticalObservationCount}
           onOpenObservations={() => setObservationsOpened(true)}
+          lengthLabel={lengthLabel}
         />
         <Center h="calc(100% - 42px)">
           <Text c="dimmed">No sheet data found for this component.</Text>
@@ -260,6 +268,7 @@ function WallViewer({ inspection }) {
         observations={observations}
         criticalObservationCount={criticalObservationCount}
         onOpenObservations={() => setObservationsOpened(true)}
+        lengthLabel={lengthLabel}
       />
       <PixiCanvas
         inspection={inspection}

@@ -27,6 +27,11 @@ const toNumber = (value) => {
   return Number.isFinite(number) ? number : null;
 };
 
+const toReadingNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number !== 0 ? number : null;
+};
+
 const readSheetRows = (workbook, sheetName) => {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
@@ -57,6 +62,7 @@ function makeLegacySections() {
     tubePitch: null,
     tubeCount: null,
     coils: null,
+    inspectionType: 'Mapping',
   }));
 }
 
@@ -85,6 +91,7 @@ function parseSectionTable(rows) {
       tubePitch: toNumber(row[headerMap['tube pitch']]),
       tubeCount: toNumber(row[headerMap['tube count']]),
       coils: toNumber(row[headerMap.coils]),
+      inspectionType: String(row[headerMap['inspection type']] ?? '').trim() || 'Mapping',
     });
   });
 
@@ -295,7 +302,7 @@ function parseSectionSheet(workbook, section) {
     if (elevation === null) return;
 
     const coilNumber = coilColumnIndex >= 0 ? toNumber(row[coilColumnIndex]) : null;
-    const values = row.slice(tubeStartIndex, tubeStartIndex + tubeNumbers.length).map(toNumber);
+    const values = row.slice(tubeStartIndex, tubeStartIndex + tubeNumbers.length).map(toReadingNumber);
     const parsedRow = { elevation, coilNumber, values };
 
     parsedRows.push(parsedRow);

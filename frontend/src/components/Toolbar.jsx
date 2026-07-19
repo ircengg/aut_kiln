@@ -10,7 +10,6 @@ import {
 import { useAtom, useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
 import {
-  appViewAtom,
   colorRangeAtom,
   displayModeAtom,
   panAtom,
@@ -37,13 +36,13 @@ function Toolbar({
   observations = [],
   criticalObservationCount = 0,
   onOpenObservations,
+  lengthLabel = "Elevation",
 }) {
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
   const [displayMode, setDisplayMode] = useAtom(displayModeAtom);
   const setPan = useSetAtom(panAtom);
   const setSelectedCell = useSetAtom(selectedCellAtom);
-  const setAppView = useSetAtom(appViewAtom);
   const hasRange =
     Number.isFinite(displayRange?.min) &&
     Number.isFinite(displayRange?.max) &&
@@ -59,11 +58,18 @@ function Toolbar({
   const modeUnit = DISPLAY_MODES[displayMode]?.unit || "";
   const formatRangeValue = (value) => value.toFixed(3);
   const focusCount = focusAreas.length;
+  const isSpotFocus = focusedArea?.kind === "spot" || focusAreas[0]?.kind === "spot";
   const focusSummary = focusedArea
-    ? `Area ${focusIndex + 1}/${focusCount} | Tubes ${focusedArea.minTube}-${focusedArea.maxTube} | Elev ${Math.round(focusedArea.minElevation)}-${Math.round(focusedArea.maxElevation)} mm | Max ${focusedArea.maxWallLoss.toFixed(1)}% | Min ${focusedArea.minThickness.toFixed(2)} mm`
+    ? isSpotFocus
+      ? `Spot ${focusIndex + 1}/${focusCount} | Tube ${focusedArea.minTube} | ${lengthLabel} ${Math.round(focusedArea.centerElevation)} mm | Wall loss ${focusedArea.maxWallLoss.toFixed(1)}% | ${focusedArea.minThickness.toFixed(2)} mm`
+      : `Area ${focusIndex + 1}/${focusCount} | Tubes ${focusedArea.minTube}-${focusedArea.maxTube} | ${lengthLabel} ${Math.round(focusedArea.minElevation)}-${Math.round(focusedArea.maxElevation)} mm | Max ${focusedArea.maxWallLoss.toFixed(1)}% | Min ${focusedArea.minThickness.toFixed(2)} mm`
     : focusCount
-      ? `${focusCount} high wall-loss areas > 20%`
-      : "No wall-loss areas > 20%";
+      ? isSpotFocus
+        ? `${focusCount} critical spots > 20%`
+        : `${focusCount} high wall-loss areas > 20%`
+      : isSpotFocus
+        ? "No critical spots > 20%"
+        : "No wall-loss areas > 20%";
   const commitRange = ([min, max]) => {
     setColorRange({
       min: Number(min.toFixed(3)),

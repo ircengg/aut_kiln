@@ -40,7 +40,7 @@ export function getDisplayRange(wallData, mode) {
 }
 
 export function formatMeasurement(value, mode) {
-  if (!Number.isFinite(value)) return '-';
+  if (!Number.isFinite(value)) return 'ND';
 
   return `${value.toFixed(2)} ${DISPLAY_MODES[mode]?.unit || ''}`.trim();
 }

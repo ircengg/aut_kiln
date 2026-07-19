@@ -17,6 +17,7 @@ import {
 import { getWallTexture } from "../utils/textureCache";
 import { formatMeasurement, getDisplayValue } from "../utils/measurements";
 import { getElevationBands } from "../utils/elevationBands";
+import { isSpotInspection } from "../utils/inspectionType";
 import { isHorizontalLayout } from "../utils/layout";
 import Tooltip from "./Tooltip";
 
@@ -24,9 +25,23 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const AXIS_COLOR = 0xe8fbf7;
 const GRID_COLOR = 0x7ccabf;
+const SPOT_COLORS = {
+  low: 0x00ff00,
+  medium: 0xffff00,
+  high: 0xcc6600,
+  thickness: 0x47d7c6,
+};
 
-function getTubeSlot(tube, pitch, diameter) {
-  return (tube - 1) * pitch + (pitch - diameter) / 2;
+function getSpotColor(wallLoss, mode) {
+  if (mode !== "wallLoss") return SPOT_COLORS.thickness;
+  if (!Number.isFinite(wallLoss)) return SPOT_COLORS.thickness;
+  if (wallLoss < 10) return SPOT_COLORS.low;
+  if (wallLoss <= 20) return SPOT_COLORS.medium;
+  return SPOT_COLORS.high;
+}
+
+function getTubeSlot(tube, pitch, diameter, isHorizontal = false) {
+  return (tube - 1) * pitch + (isHorizontal ? 0 : (pitch - diameter) / 2);
 }
 
 function getCellRect({
@@ -41,29 +56,29 @@ function getCellRect({
   if (isHorizontal) {
     return {
       x: band.lower,
-      y: getTubeSlot(tube, pitch, diameter),
+      y: getTubeSlot(tube, pitch, diameter, true),
       width: Math.max(band.upper - band.lower, minLength),
       height: diameter,
     };
   }
 
   return {
-    x: getTubeSlot(tube, pitch, diameter),
+      x: getTubeSlot(tube, pitch, diameter, false),
     y: bounds.height - band.upper,
     width: diameter,
     height: Math.max(band.upper - band.lower, minLength),
   };
 }
 
-function getAreaRect({ isHorizontal, area, bounds, pitch, rowHeight }) {
+function getAreaRect({ isHorizontal, area, bounds, pitch, rowHeight, diameter }) {
   const padding = pitch * 0.18;
 
   if (isHorizontal) {
     return {
       x: area.minLower,
-      y: (area.minTube - 1) * pitch + padding,
+      y: (area.minTube - 1) * pitch,
       width: Math.max(area.maxUpper - area.minLower, rowHeight),
-      height: (area.maxTube - area.minTube + 1) * pitch - padding * 2,
+      height: Math.max((area.maxTube - area.minTube) * pitch + diameter, diameter),
     };
   }
 
@@ -73,6 +88,18 @@ function getAreaRect({ isHorizontal, area, bounds, pitch, rowHeight }) {
     width: (area.maxTube - area.minTube + 1) * pitch - padding * 2,
     height: Math.max(area.maxUpper - area.minLower, rowHeight),
   };
+}
+
+function getSpotPoint({ isHorizontal, tube, elevation, bounds, pitch, diameter }) {
+  return isHorizontal
+    ? {
+        x: elevation,
+        y: (tube - 1) * pitch + diameter / 2,
+      }
+    : {
+        x: (tube - 0.5) * pitch,
+        y: bounds.height - elevation,
+      };
 }
 
 function getNiceStep(rawStep) {
@@ -125,6 +152,7 @@ function PixiCanvas({
   const containerRef = useRef(null);
   const spriteRef = useRef(null);
   const separatorRef = useRef(null);
+  const spotsRef = useRef(null);
   const selectionRef = useRef(null);
   const focusRef = useRef(null);
   const axisRef = useRef(null);
@@ -139,6 +167,7 @@ function PixiCanvas({
   const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
   const isHorizontal = isHorizontalLayout(wallData.layout);
   const tubeCount = wallData.tubeCount || 0;
+  const isSpot = isSpotInspection(wallData);
   const dataTubeCount =
     wallData.dataTubeCount || wallData.tubeNumbers?.length || tubeCount;
   const tubeNumbers = useMemo(
@@ -174,6 +203,7 @@ function PixiCanvas({
     const container = new Container();
     const sprite = new Sprite();
     const separators = new Graphics();
+    const spots = new Graphics();
     const selection = new Graphics();
     const focus = new Graphics();
     const axis = new Container();
@@ -195,7 +225,7 @@ function PixiCanvas({
           return;
         }
 
-        container.addChild(sprite, separators, selection, focus);
+        container.addChild(sprite, separators, spots, selection, focus);
         app.stage.addChild(container, axis);
         hostRef.current.appendChild(app.canvas);
 
@@ -203,6 +233,7 @@ function PixiCanvas({
         containerRef.current = container;
         spriteRef.current = sprite;
         separatorRef.current = separators;
+        spotsRef.current = spots;
         selectionRef.current = selection;
         focusRef.current = focus;
         axisRef.current = axis;
@@ -215,6 +246,7 @@ function PixiCanvas({
       containerRef.current = null;
       spriteRef.current = null;
       separatorRef.current = null;
+      spotsRef.current = null;
       selectionRef.current = null;
       focusRef.current = null;
       axisRef.current = null;
@@ -275,7 +307,10 @@ function PixiCanvas({
 
     graphics.clear();
     for (let tubeIndex = 1; tubeIndex < tubeCount; tubeIndex += 1) {
-      const position = tubeIndex * pitch;
+      const position = isHorizontal
+        ? tubeIndex * pitch - (pitch - diameter) / 2
+        : tubeIndex * pitch;
+      if (position < 0) continue;
       if (isHorizontal) {
         graphics.moveTo(0, position);
         graphics.lineTo(bounds.width, position);
@@ -292,10 +327,91 @@ function PixiCanvas({
   }, [
     bounds.height,
     bounds.width,
+    diameter,
     isHorizontal,
     pitch,
     pixiReady,
     tubeCount,
+    zoom,
+  ]);
+
+  useEffect(() => {
+    if (!pixiReady) return undefined;
+    const graphics = spotsRef.current;
+    const app = appRef.current;
+    if (!graphics || !app) return undefined;
+
+    const drawSpots = () => {
+      graphics.clear();
+      if (!isSpot || !wallData.values?.length) return;
+
+      const pulse = (Math.sin(performance.now() / 210) + 1) / 2;
+      const radius = Math.max(Math.min(diameter * 0.42, pitch * 0.32), 2 / zoom);
+      const glowRadius = radius * (1.8 + pulse * 0.7);
+      const rangeMin = colorRange?.min ?? displayRange?.min;
+      const rangeMax = colorRange?.max ?? displayRange?.max;
+
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+        const elevation = wallData.elevations[rowIndex];
+        if (!Number.isFinite(elevation)) continue;
+
+        for (let dataTubeIndex = 0; dataTubeIndex < dataTubeCount; dataTubeIndex += 1) {
+          const tube = tubeNumbers[dataTubeIndex] ?? dataTubeIndex + 1;
+          const thickness = wallData.values[rowIndex * dataTubeCount + dataTubeIndex];
+          const displayValue = getDisplayValue(thickness, displayMode, wallData.tubeNominal);
+          const wallLoss = getDisplayValue(thickness, "wallLoss", wallData.tubeNominal);
+          if (!Number.isFinite(displayValue)) continue;
+
+          const inRange =
+            displayValue >= (rangeMin ?? displayValue) &&
+            displayValue <= (rangeMax ?? displayValue);
+          const isCritical = Number.isFinite(wallLoss) && wallLoss > 20;
+          const point = getSpotPoint({ isHorizontal, tube, elevation, bounds, pitch, diameter });
+          const color = getSpotColor(wallLoss, displayMode);
+
+          if (isCritical) {
+            graphics.circle(point.x, point.y, glowRadius);
+            graphics.fill({
+              color: SPOT_COLORS.high,
+              alpha: inRange ? 0.1 + pulse * 0.1 : 0.035,
+            });
+          }
+
+          graphics.circle(point.x, point.y, radius);
+          graphics.fill({ color, alpha: inRange ? 0.88 : 0.24 });
+          graphics.stroke({
+            width: Math.max((isCritical ? 1.8 : 1.1) / zoom, 0.25),
+            color: isCritical ? 0xfff3a0 : 0x061114,
+            alpha: inRange ? 0.9 : 0.35,
+          });
+        }
+      }
+    };
+
+    app.ticker.add(drawSpots);
+
+    return () => {
+      app.ticker.remove(drawSpots);
+      graphics.clear();
+    };
+  }, [
+    bounds,
+    colorRange?.max,
+    colorRange?.min,
+    dataTubeCount,
+    diameter,
+    displayMode,
+    displayRange?.max,
+    displayRange?.min,
+    isHorizontal,
+    isSpot,
+    pitch,
+    pixiReady,
+    rowCount,
+    tubeNumbers,
+    wallData.elevations,
+    wallData.tubeNominal,
+    wallData.values,
     zoom,
   ]);
 
@@ -306,6 +422,24 @@ function PixiCanvas({
 
     graphics.clear();
     if (!selectedCell || selectedCell.wall !== selectedWall) return;
+
+    if (isSpot) {
+      const point = getSpotPoint({
+        isHorizontal,
+        tube: selectedCell.tube,
+        elevation: selectedCell.elevation,
+        bounds,
+        pitch,
+        diameter,
+      });
+      graphics.circle(point.x, point.y, Math.max(diameter * 0.56, pitch * 0.24));
+      graphics.stroke({
+        width: Math.max(2.4 / zoom, 0.45),
+        color: 0xfff3a0,
+        alpha: 0.95,
+      });
+      return;
+    }
 
     const band = elevationBands[selectedCell.rowIndex];
     if (!band) return;
@@ -331,6 +465,7 @@ function PixiCanvas({
     diameter,
     elevationBands,
     isHorizontal,
+    isSpot,
     pitch,
     pixiReady,
     rowHeight,
@@ -350,12 +485,35 @@ function PixiCanvas({
       if (!focusedArea) return;
 
       const pulse = (Math.sin(performance.now() / 180) + 1) / 2;
+      if (focusedArea.kind === "spot" || isSpot) {
+        const cell = focusedArea.cells?.[0];
+        const point = getSpotPoint({
+          isHorizontal,
+          tube: focusedArea.centerTube || cell?.tube,
+          elevation: focusedArea.centerElevation || cell?.elevation,
+          bounds,
+          pitch,
+          diameter,
+        });
+        const radius = Math.max(diameter * (0.8 + pulse * 0.24), pitch * 0.34);
+
+        graphics.circle(point.x, point.y, radius);
+        graphics.fill({ color: 0xfff3a0, alpha: 0.07 + pulse * 0.08 });
+        graphics.stroke({
+          width: Math.max((2.8 + pulse * 3.2) / zoom, 0.55),
+          color: 0xfff3a0,
+          alpha: 0.8,
+        });
+        return;
+      }
+
       const rect = getAreaRect({
         isHorizontal,
         area: focusedArea,
         bounds,
         pitch,
         rowHeight,
+        diameter,
       });
 
       graphics.roundRect(
@@ -379,7 +537,7 @@ function PixiCanvas({
       app.ticker.remove(drawFocus);
       graphics.clear();
     };
-  }, [bounds, focusedArea, isHorizontal, pitch, pixiReady, rowHeight, zoom]);
+  }, [bounds, diameter, focusedArea, isHorizontal, isSpot, pitch, pixiReady, rowHeight, zoom]);
 
   useEffect(() => {
     if (!pixiReady) return;
@@ -415,7 +573,7 @@ function PixiCanvas({
       tubeIndex += tubeStep
     ) {
       if (isHorizontal) {
-        const y = pan.y + (tubeIndex * pitch + pitch / 2) * zoom;
+        const y = pan.y + (tubeIndex * pitch + diameter / 2) * zoom;
         graphics.moveTo(0, y);
         graphics.lineTo(size.width, y);
         axis.addChild(
@@ -486,7 +644,7 @@ function PixiCanvas({
     axis.addChildAt(graphics, 0);
     axis.addChild(
       makeAxisLabel(
-        isHorizontal ? "Elevation mm" : "Tube",
+        isHorizontal ? "Distance mm" : "Tube",
         clamp((screenLeft + screenRight) / 2, 50, size.width - 50),
         size.height - 10,
       ),
@@ -498,6 +656,7 @@ function PixiCanvas({
     bounds,
     bounds.height,
     bounds.width,
+    diameter,
     isHorizontal,
     pan.x,
     pan.y,
@@ -521,19 +680,14 @@ function PixiCanvas({
       const tubeIndex = Math.floor(tubeAxisPosition / pitch);
       const tubeNumber = tubeIndex + 1;
       const dataTubeIndex = tubeNumberToDataIndex.get(tubeNumber);
-      const rowIndex = elevationBands.findIndex(
-        (band) => elevation >= band.lower && elevation <= band.upper,
-      );
       const tubeOffsetPosition = tubeAxisPosition - tubeIndex * pitch;
-      const tubeStart = (pitch - diameter) / 2;
+      const tubeStart = isHorizontal ? 0 : (pitch - diameter) / 2;
       const tubeEnd = tubeStart + diameter;
 
       if (
         tubeIndex < 0 ||
         tubeIndex >= tubeCount ||
-        dataTubeIndex === undefined ||
-        rowIndex < 0 ||
-        rowIndex >= rowCount
+        dataTubeIndex === undefined
       ) {
         return null;
       }
@@ -542,8 +696,44 @@ function PixiCanvas({
         return null;
       }
 
+      let rowIndex = elevationBands.findIndex(
+        (band) => elevation >= band.lower && elevation <= band.upper,
+      );
+
+      if (isSpot) {
+        const radius = Math.max(diameter * 0.55, pitch * 0.28, 8 / zoom);
+        let closestDistance = Infinity;
+        let closestRowIndex = -1;
+
+        wallData.elevations.forEach((spotElevation, index) => {
+          const point = getSpotPoint({
+            isHorizontal,
+            tube: tubeNumber,
+            elevation: spotElevation,
+            bounds,
+            pitch,
+            diameter,
+          });
+          const distance = Math.hypot(worldX - point.x, worldY - point.y);
+
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestRowIndex = index;
+          }
+        });
+
+        if (closestDistance > radius) return null;
+        rowIndex = closestRowIndex;
+      }
+
+      if (rowIndex < 0 || rowIndex >= rowCount) {
+        return null;
+      }
+
       const thickness =
         wallData.values[rowIndex * dataTubeCount + dataTubeIndex];
+      if (isSpot && !Number.isFinite(thickness)) return null;
+
       const displayValue = getDisplayValue(
         thickness,
         displayMode,
@@ -556,6 +746,7 @@ function PixiCanvas({
         tubeIndex,
         tube: tubeNumber,
         elevation: wallData.elevations[rowIndex],
+        lengthLabel: isHorizontal ? "Distance" : "Elevation",
         thickness: Number.isFinite(thickness) ? thickness : null,
         displayMode,
         displayValue: Number.isFinite(displayValue) ? displayValue : null,
@@ -570,9 +761,10 @@ function PixiCanvas({
     },
     [
       inspection.inspectionName,
-      bounds.height,
+      bounds,
       elevationBands,
       isHorizontal,
+      isSpot,
       pan.x,
       pan.y,
       pitch,

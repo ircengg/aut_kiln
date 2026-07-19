@@ -1,4 +1,5 @@
 import { getElevationBands } from './elevationBands';
+import { isSpotInspection } from './inspectionType';
 import { getDisplayValue } from './measurements';
 
 const HIGH_WALL_LOSS_LIMIT = 20;
@@ -63,6 +64,7 @@ function summarizeArea(cells, bands, index) {
 
   return {
     id: `corrosion-${index}`,
+    kind: cells.length === 1 && cells[0].kind === 'spot' ? 'spot' : 'area',
     cells,
     count: cells.length,
     minTube,
@@ -81,9 +83,16 @@ function summarizeArea(cells, bands, index) {
 
 export function getCorrodedAreas(wallData) {
   const highCells = getHighWallLossCells(wallData);
+  const bands = getElevationBands(wallData);
+
+  if (isSpotInspection(wallData)) {
+    return highCells
+      .map((cell, index) => summarizeArea([{ ...cell, kind: 'spot' }], bands, index))
+      .sort((a, b) => b.maxWallLoss - a.maxWallLoss || a.minTube - b.minTube);
+  }
+
   const cellMap = new Map(highCells.map((cell) => [makeCellKey(cell.rowIndex, cell.dataTubeIndex), cell]));
   const visited = new Set();
-  const bands = getElevationBands(wallData);
   const areas = [];
 
   highCells.forEach((startCell) => {

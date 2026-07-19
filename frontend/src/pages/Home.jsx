@@ -1,6 +1,5 @@
 import {
   AppShell,
-  Button,
   Group,
   Paper,
   Stack,
@@ -131,7 +130,9 @@ function Home() {
           </Text>
           {hoverCell?.coil && <Text size="xs">Coil: {hoverCell.coil}</Text>}
           <Text size="xs">Tube: {hoverCell?.tube ?? "-"}</Text>
-          <Text size="xs">Elevation: {hoverCell?.elevation ?? "-"} mm</Text>
+          <Text size="xs">
+            {hoverCell?.lengthLabel || "Elevation"}: {hoverCell?.elevation ?? "-"} mm
+          </Text>
           <Text size="xs">
             Thickness: {formatMeasurement(hoverCell?.thickness, "thickness")}
           </Text>

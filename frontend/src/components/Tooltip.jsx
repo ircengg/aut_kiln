@@ -10,7 +10,9 @@ function Tooltip({ cell }) {
         Tube {cell.tube}
       </Text>
       {cell.coil && <Text size="xs">Coil {cell.coil}</Text>}
-      <Text size="xs">Elevation {cell.elevation} mm</Text>
+      <Text size="xs">
+        {cell.lengthLabel || 'Elevation'} {cell.elevation} mm
+      </Text>
       <Text size="xs">Thickness {formatMeasurement(cell.thickness, 'thickness')}</Text>
       {cell.displayMode === 'wallLoss' && (
         <Text size="xs">

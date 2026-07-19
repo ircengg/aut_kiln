@@ -1,6 +1,7 @@
 import { Texture } from 'pixi.js';
 import { getElevationBands } from './elevationBands';
 import { getThicknessRgba } from './heatmap';
+import { isSpotInspection } from './inspectionType';
 import { isHorizontalLayout } from './layout';
 import { getDisplayValue } from './measurements';
 
@@ -8,6 +9,7 @@ const textureCache = new Map();
 const SLOT_PIXELS = 10;
 const MAX_TEXTURE_HEIGHT = 8192;
 const MUTED_COLOR = [188, 194, 202, 140];
+const SPOT_TUBE_COLOR = [132, 143, 148, 190];
 const WALL_LOSS_COLORS = {
   low: [0, 255, 0, 255],
   medium: [255, 255, 0, 255],
@@ -61,10 +63,13 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
   const isHorizontal = isHorizontalLayout(wallData.layout);
   const diameter = Math.min(wallData.tubeDiameter || pitch * 0.72, pitch * 0.92);
   const tubePixels = Math.max(1, Math.round((diameter / pitch) * SLOT_PIXELS));
-  const tubeOffset = Math.max(0, Math.floor((SLOT_PIXELS - tubePixels) / 2));
+  const tubeOffset = isHorizontal ? 0 : Math.max(0, Math.floor((SLOT_PIXELS - tubePixels) / 2));
   const lengthPixels = getTextureHeight(wallData);
-  const width = isHorizontal ? lengthPixels : tubeCount * SLOT_PIXELS;
-  const height = isHorizontal ? tubeCount * SLOT_PIXELS : lengthPixels;
+  const tubeSpanPixels = isHorizontal
+    ? Math.max((tubeCount - 1) * SLOT_PIXELS + tubePixels, tubePixels)
+    : tubeCount * SLOT_PIXELS;
+  const width = isHorizontal ? lengthPixels : tubeSpanPixels;
+  const height = isHorizontal ? tubeSpanPixels : lengthPixels;
   const tubeLength = wallData.tubeLength || Math.max(...(wallData.elevations || [1]), 1);
   const elevationBands = getElevationBands(wallData);
   const canvas = document.createElement('canvas');
@@ -78,6 +83,31 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
 
   const imageData = new ImageData(width, height);
   const scaleRange = getScaleRange(wallData, mode, displayRange);
+
+  if (isSpotInspection(wallData)) {
+    for (let tubeIndex = 0; tubeIndex < tubeCount; tubeIndex += 1) {
+      for (let tubePixel = 0; tubePixel < tubePixels; tubePixel += 1) {
+        const tubeSlotPixel = tubeIndex * SLOT_PIXELS + tubeOffset + tubePixel;
+
+        for (let lengthPixel = 0; lengthPixel < lengthPixels; lengthPixel += 1) {
+          const x = isHorizontal ? lengthPixel : tubeSlotPixel;
+          const y = isHorizontal ? tubeSlotPixel : height - 1 - lengthPixel;
+          const offset = (y * width + x) * 4;
+          imageData.data[offset] = SPOT_TUBE_COLOR[0];
+          imageData.data[offset + 1] = SPOT_TUBE_COLOR[1];
+          imageData.data[offset + 2] = SPOT_TUBE_COLOR[2];
+          imageData.data[offset + 3] = SPOT_TUBE_COLOR[3];
+        }
+      }
+    }
+
+    context.putImageData(imageData, 0, 0);
+
+    const texture = Texture.from(canvas);
+    texture.source.scaleMode = 'nearest';
+
+    return texture;
+  }
 
   for (let rowIndex = 0; rowIndex < elevationBands.length; rowIndex += 1) {
     const band = elevationBands[rowIndex];
@@ -135,7 +165,7 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
 export function getWallTexture(inspectionId, wallName, wallData, focusRange, mode, displayRange) {
   const min = focusRange?.min;
   const max = focusRange?.max;
-  const key = `${inspectionId}:${wallName}:${wallData?.dataKey || 'all'}:${wallData?.layout || 'vertical'}:${wallData?.tubeCount}:${wallData?.tubeLength}:${mode}:${displayRange?.min}:${displayRange?.max}:${min}:${max}`;
+  const key = `${inspectionId}:${wallName}:${wallData?.dataKey || 'all'}:${wallData?.layout || 'vertical'}:${wallData?.inspectionType || 'Mapping'}:${wallData?.tubeCount}:${wallData?.tubeLength}:${mode}:${displayRange?.min}:${displayRange?.max}:${min}:${max}`;
   const cached = textureCache.get(key);
 
   if (cached) return cached;
