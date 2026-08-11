@@ -1826,6 +1826,20 @@ body {
   border-color: #087f8c;
 }
 
+.kiln-nozzle-label {
+  display: block;
+  padding: 3px 6px;
+  color: #31535a;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(49, 83, 90, 0.35);
+  border-radius: 4px;
+  box-shadow: 0 3px 12px rgba(31, 56, 62, 0.16);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .kiln-home-assembly {
   position: absolute;
   inset: 25% 1% 25% 1%;

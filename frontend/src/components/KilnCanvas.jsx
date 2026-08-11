@@ -186,10 +186,19 @@ function ringPoints(x, radius, segments = 96) {
   });
 }
 
-function KilnReferenceGrid({ sections }) {
-  const start = Math.min(...sections.map((section) => section.axialStart || 0));
-  const end = Math.max(...sections.map((section) => (section.axialStart || 0) + (section.axialLength || 0)));
-  const maxRadius = Math.max(...sections.flatMap((section) => [section.radiusStart || 1, section.radiusEnd || section.radiusStart || 1])) * WORLD_SCALE;
+function KilnReferenceGrid({ sections, showLabels }) {
+  const bodySections = sections.filter((section) => !/tyre|tire|support|ring/i.test(section.name));
+  const gridSections = bodySections.length ? bodySections : sections;
+  const start = Math.min(...gridSections.map((section) => section.axialStart || 0));
+  const end = Math.max(...gridSections.map((section) => (section.axialStart || 0) + (section.axialLength || 0)));
+  const maxRadius = Math.max(...gridSections.flatMap((section) => [section.radiusStart || 1, section.radiusEnd || section.radiusStart || 1])) * WORLD_SCALE;
+  const radiusAt = (axial) => {
+    const section = gridSections.find((item) => axial >= (item.axialStart || 0) && axial <= (item.axialStart || 0) + (item.axialLength || 0));
+    if (!section) return maxRadius / WORLD_SCALE;
+    const local = axial - (section.axialStart || 0);
+    const fraction = THREE.MathUtils.clamp(local / Math.max(section.axialLength || 1, 1), 0, 1);
+    return THREE.MathUtils.lerp(section.radiusStart || 1, section.radiusEnd || section.radiusStart || 1, fraction);
+  };
   const rawStep = Math.max((end - start) / 6, 1);
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const step = Math.ceil(rawStep / magnitude) * magnitude;
@@ -200,23 +209,29 @@ function KilnReferenceGrid({ sections }) {
     <group>
       {axialTicks.map((value) => (
         <group key={value}>
-          <Line points={ringPoints(value * WORLD_SCALE, maxRadius * 1.012, 72)} color="#7f969c" lineWidth={0.65} transparent opacity={0.5} />
-          <Html position={[value * WORLD_SCALE, -maxRadius * 1.18, 0]} center><span className="kiln-grid-label">{value.toLocaleString()} mm</span></Html>
+          <Line points={ringPoints(value * WORLD_SCALE, radiusAt(value) * WORLD_SCALE * 1.012, 72)} color="#7f969c" lineWidth={0.65} transparent opacity={0.5} />
+          {showLabels && <Html position={[value * WORLD_SCALE, -radiusAt(value) * WORLD_SCALE * 1.18, 0]} center><span className="kiln-grid-label">{value.toLocaleString()} mm</span></Html>}
         </group>
       ))}
       {Array.from({ length: 12 }, (_, index) => index * 30).map((degrees) => {
         const angle = THREE.MathUtils.degToRad(degrees);
-        const y = maxRadius * Math.cos(angle) * 1.015;
-        const z = maxRadius * Math.sin(angle) * 1.015;
+        const linePoints = Array.from({ length: 65 }, (_, index) => {
+          const axial = start + (index / 64) * (end - start);
+          const radius = radiusAt(axial) * WORLD_SCALE * 1.015;
+          return [axial * WORLD_SCALE, radius * Math.cos(angle), radius * Math.sin(angle)];
+        });
+        const startRadius = radiusAt(start) * WORLD_SCALE * 1.015;
+        const y = startRadius * Math.cos(angle);
+        const z = startRadius * Math.sin(angle);
         return (
           <group key={degrees}>
-            <Line points={[[start * WORLD_SCALE, y, z], [end * WORLD_SCALE, y, z]]} color="#66858c" lineWidth={degrees % 90 === 0 ? 0.9 : 0.45} transparent opacity={degrees % 90 === 0 ? 0.62 : 0.32} />
-            <Html position={[start * WORLD_SCALE - 0.25, y, z]} center><span className="kiln-grid-label kiln-angle-label">{degrees}°</span></Html>
+            <Line points={linePoints} color="#66858c" lineWidth={degrees % 90 === 0 ? 0.9 : 0.45} transparent opacity={degrees % 90 === 0 ? 0.62 : 0.32} />
+            {showLabels && <Html position={[start * WORLD_SCALE - 0.25, y, z]} center><span className="kiln-grid-label kiln-angle-label">{degrees}°</span></Html>}
           </group>
         );
       })}
-      <Html position={[(start + end) * 0.5 * WORLD_SCALE, -maxRadius * 1.42, 0]} center><span className="kiln-axis-label">AXIAL DISTANCE (mm) →</span></Html>
-      <Html position={[start * WORLD_SCALE, maxRadius * 1.42, 0]} center><span className="kiln-axis-label">CIRCUMFERENCE / ANGLE ↻</span></Html>
+      {showLabels && <Html position={[(start + end) * 0.5 * WORLD_SCALE, -maxRadius * 1.42, 0]} center><span className="kiln-axis-label">AXIAL DISTANCE (mm) →</span></Html>}
+      {showLabels && <Html position={[start * WORLD_SCALE, maxRadius * 1.42, 0]} center><span className="kiln-axis-label">CIRCUMFERENCE / ANGLE ↻</span></Html>}
     </group>
   );
 }
@@ -356,7 +371,53 @@ function KilnProcessInterior({ sections, active }) {
   );
 }
 
-function Surface({ geometry, inspection, wallData, displayMode, reveal, rotating, focusedArea }) {
+function KilnNozzles({ nozzles = [], sections, showLabels }) {
+  return nozzles.map((nozzle) => {
+    const candidates = sections.filter((section) => {
+      const start = section.axialStart || 0;
+      return nozzle.axialPosition >= start && nozzle.axialPosition <= start + (section.axialLength || 0);
+    });
+    const section = candidates.sort((a, b) =>
+      Math.max(b.radiusStart || 0, b.radiusEnd || 0) - Math.max(a.radiusStart || 0, a.radiusEnd || 0),
+    )[0];
+    if (!section) return null;
+    const localAxial = nozzle.axialPosition - (section.axialStart || 0);
+    const fraction = THREE.MathUtils.clamp(localAxial / Math.max(section.axialLength || 1, 1), 0, 1);
+    const radius = THREE.MathUtils.lerp(section.radiusStart || 1, section.radiusEnd || section.radiusStart || 1, fraction) * WORLD_SCALE;
+    const radial = new THREE.Vector3(0, Math.cos(nozzle.angle), Math.sin(nozzle.angle));
+    const position = new THREE.Vector3(nozzle.axialPosition * WORLD_SCALE, 0, 0).addScaledVector(radial, radius);
+    const labelPosition = position.clone().addScaledVector(radial, Math.max(nozzle.diameter * WORLD_SCALE * 1.78, 0.22));
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), radial);
+    const nozzleRadius = Math.max(nozzle.diameter * WORLD_SCALE / 2, 0.025);
+    const neckLength = Math.max(nozzle.diameter * WORLD_SCALE * 1.15, 0.12);
+
+    return (
+      <group key={nozzle.id}>
+        <group position={position.toArray()} quaternion={quaternion.toArray()}>
+          <mesh position={[0, neckLength / 2, 0]}>
+            <cylinderGeometry args={[nozzleRadius, nozzleRadius, neckLength, 28, 1, true]} />
+            <meshStandardMaterial color="#718a91" metalness={0.62} roughness={0.32} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, neckLength, 0]}>
+            <cylinderGeometry args={[nozzleRadius * 1.42, nozzleRadius * 1.42, Math.max(nozzleRadius * 0.34, 0.025), 32]} />
+            <meshStandardMaterial color="#eef4f5" metalness={0.68} roughness={0.25} />
+          </mesh>
+          <mesh position={[0, neckLength * 1.04, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[nozzleRadius * 1.08, nozzleRadius * 0.12, 10, 32]} />
+            <meshStandardMaterial color="#4f686e" metalness={0.72} roughness={0.26} />
+          </mesh>
+        </group>
+        {showLabels && <Html position={labelPosition.toArray()} center>
+          <span className="kiln-nozzle-label">
+            {nozzle.name} · Ø{nozzle.diameter} mm · {nozzle.axialPosition} mm · {nozzle.circumferenceDegrees}°
+          </span>
+        </Html>}
+      </group>
+    );
+  });
+}
+
+function Surface({ geometry, inspection, wallData, displayMode, reveal, rotating, focusedArea, showLabels, showGrid }) {
   const groupRef = useRef();
   const selectedWall = useAtomValue(selectedWallAtom);
   const [, setHoverCell] = useAtom(hoverCellAtom);
@@ -404,16 +465,17 @@ function Surface({ geometry, inspection, wallData, displayMode, reveal, rotating
             </mesh>
             <Line points={ringPoints(start, radiusStart * 1.012)} color="#ffffff" lineWidth={2} />
             <Line points={ringPoints(start + length, radiusEnd * 1.012)} color="#ffffff" lineWidth={2} />
-            <Html position={[start + length / 2, radiusStart * 1.12, 0]} center>
+            {showLabels && <Html position={[start + length / 2, radiusStart * 1.12, 0]} center>
               <span className={`kiln-section-label ${isSelected ? 'is-active' : ''}`}>
                 {section.name} · {section.axialStart || 0}–{(section.axialStart || 0) + (section.axialLength || 0)} mm
               </span>
-            </Html>
+            </Html>}
           </group>
         );
       })}
+      <KilnNozzles nozzles={inspection.nozzles} sections={sections} showLabels={showLabels} />
       {rotating && <KilnProcessInterior sections={sections} active />}
-      <KilnReferenceGrid sections={sections} />
+      {showGrid && <KilnReferenceGrid sections={sections} showLabels={showLabels} />}
       <mesh
         geometry={geometry}
         onPointerMove={(event) => { event.stopPropagation(); setHoverCell(getReading(event)); }}
@@ -440,7 +502,7 @@ function Surface({ geometry, inspection, wallData, displayMode, reveal, rotating
   );
 }
 
-const KilnCanvas = forwardRef(function KilnCanvas({ inspection, wallData, colorRange, displayMode, displayRange, focusedArea, exaggeration = 1, rotating = false, reveal = 1 }, ref) {
+const KilnCanvas = forwardRef(function KilnCanvas({ inspection, wallData, colorRange, displayMode, displayRange, focusedArea, exaggeration = 1, rotating = false, reveal = 1, showLabels = true, showGrid = true }, ref) {
   const controlsRef = useRef();
   const cameraApiRef = useRef();
   const [viewRequest, setViewRequest] = useState(0);
@@ -472,7 +534,7 @@ const KilnCanvas = forwardRef(function KilnCanvas({ inspection, wallData, colorR
         <color attach="background" args={['#f4f7f8']} />
         <ambientLight intensity={0.7} />
         <directionalLight position={[5, 8, 7]} intensity={2.2} />
-        <Surface geometry={geometry} inspection={inspection} wallData={wallData} displayMode={displayMode} reveal={reveal} rotating={rotating} focusedArea={focusedArea} />
+        <Surface geometry={geometry} inspection={inspection} wallData={wallData} displayMode={displayMode} reveal={reveal} rotating={rotating} focusedArea={focusedArea} showLabels={showLabels} showGrid={showGrid} />
         <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.08} minZoom={8} maxZoom={500} />
         <CameraRig controlsRef={controlsRef} cameraApiRef={cameraApiRef} bounds={assemblyBounds} focusedArea={focusedArea} wallData={wallData} viewRequest={viewRequest} />
         <GizmoHelper alignment="bottom-right" margin={[78, 78]}>

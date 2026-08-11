@@ -23,6 +23,7 @@ const normalize = (value) => String(value ?? '').trim().toLowerCase().replace(/\
 const compact = (value) => normalize(value).replace(/[^a-z0-9]/g, '');
 
 const toNumber = (value) => {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 };
@@ -216,12 +217,19 @@ function parseKilnGeometry(workbook) {
     const length = toNumber(row[headerMap.length]);
     const start = toNumber(row[headerMap.start]) ?? 0;
     const nominal = toNumber(row[headerMap['nominal thickness']]);
+    const geometryType = String(row[headerMap.type] ?? '').trim().toUpperCase();
+
+    // The merged Details sheet can contain other tables below Geometry.
+    // Only rows with a complete geometry definition are kiln sections.
+    if (diameterStart === null || diameterEnd === null || length === null || !geometryType) {
+      return null;
+    }
 
     return {
       id: name,
       name,
       assetType: 'kiln',
-      geometryType: String(row[headerMap.type] || 'CYLINDER').toUpperCase(),
+      geometryType,
       diameterStart,
       diameterEnd,
       radiusStart: diameterStart === null ? null : diameterStart / 2,
@@ -238,6 +246,37 @@ function parseKilnGeometry(workbook) {
       inspectionType: 'Mapping',
     };
   }).filter(Boolean);
+}
+
+function parseKilnNozzles(workbook) {
+  const sheetName = findSheetName(workbook, 'Details') || findSheetName(workbook, 'Geometry');
+  const rows = readSheetRows(workbook, sheetName);
+  const headerIndex = rows.findIndex((row) => {
+    const labels = row.map(normalize);
+    return labels.includes('nozzle') && labels.includes('diameter') &&
+      labels.includes('axial position (mm)') && labels.includes('circumference position (degree)');
+  });
+  if (headerIndex < 0) return [];
+
+  const headerMap = getHeaderMap(rows[headerIndex]);
+  const nozzles = [];
+  for (const row of rows.slice(headerIndex + 1)) {
+    const name = String(row[headerMap.nozzle] ?? '').trim();
+    if (!name) break;
+    const diameter = toNumber(row[headerMap.diameter]);
+    const axialPosition = toNumber(row[headerMap['axial position (mm)']]);
+    const circumferenceDegrees = toNumber(row[headerMap['circumference position (degree)']]);
+    if (diameter === null || axialPosition === null || circumferenceDegrees === null) continue;
+    nozzles.push({
+      id: name,
+      name,
+      diameter,
+      axialPosition,
+      circumferenceDegrees,
+      angle: circumferenceDegrees * Math.PI / 180,
+    });
+  }
+  return nozzles;
 }
 
 function splitMediaList(value) {
@@ -481,6 +520,7 @@ export async function parseInspection(source) {
   const buffer = await readSourceBuffer(source);
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
   const kilnSections = parseKilnGeometry(workbook);
+  const kilnNozzles = kilnSections.length ? parseKilnNozzles(workbook) : [];
   const kilnProject = kilnSections.length ? parseKilnProject(workbook) : null;
   const details = kilnSections.length
     ? { ...kilnProject, sections: kilnSections }
@@ -512,6 +552,7 @@ export async function parseInspection(source) {
     rotationReference: details.rotationReference,
     coordinateSystem: details.coordinateSystem,
     note: details.note || '',
+    nozzles: kilnNozzles,
     sections,
     availableSections,
     observations,

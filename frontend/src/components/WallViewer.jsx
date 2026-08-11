@@ -43,6 +43,8 @@ function WallViewer({ inspection }) {
   const [corrosionExaggeration, setCorrosionExaggeration] = useState(1);
   const [kilnRotating, setKilnRotating] = useState(true);
   const [corrosionReveal, setCorrosionReveal] = useState(1);
+  const [kilnLabelsVisible, setKilnLabelsVisible] = useState(true);
+  const [kilnGridVisible, setKilnGridVisible] = useState(true);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const wallConfig = useMemo(
@@ -300,6 +302,10 @@ function WallViewer({ inspection }) {
         onToggleKilnRotation={() => setKilnRotating((value) => !value)}
         onFit3d={() => kilnRef.current?.fit()}
         onReset3d={() => kilnRef.current?.reset()}
+        kilnLabelsVisible={kilnLabelsVisible}
+        onToggleKilnLabels={() => setKilnLabelsVisible((value) => !value)}
+        kilnGridVisible={kilnGridVisible}
+        onToggleKilnGrid={() => setKilnGridVisible((value) => !value)}
       />
       {isKiln ? (
         <KilnCanvas
@@ -313,6 +319,8 @@ function WallViewer({ inspection }) {
           exaggeration={corrosionExaggeration}
           rotating={kilnRotating}
           reveal={corrosionReveal}
+          showLabels={kilnLabelsVisible}
+          showGrid={kilnGridVisible}
         />
       ) : (
         <PixiCanvas

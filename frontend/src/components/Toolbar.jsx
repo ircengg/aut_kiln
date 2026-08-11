@@ -44,6 +44,10 @@ function Toolbar({
   onToggleKilnRotation,
   onFit3d,
   onReset3d,
+  kilnLabelsVisible = true,
+  onToggleKilnLabels,
+  kilnGridVisible = true,
+  onToggleKilnGrid,
 }) {
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
@@ -179,6 +183,16 @@ function Toolbar({
               {kilnRotating ? "II" : "R"}
             </ActionIcon>
           </Tooltip>
+        )}
+        {isKiln && (
+          <>
+            <Tooltip label={kilnLabelsVisible ? "Hide all labels" : "Show all labels"}>
+              <ActionIcon aria-label="Toggle kiln labels" size="sm" variant={kilnLabelsVisible ? "filled" : "light"} onClick={onToggleKilnLabels}>L</ActionIcon>
+            </Tooltip>
+            <Tooltip label={kilnGridVisible ? "Hide grid and grid labels" : "Show grid and grid labels"}>
+              <ActionIcon aria-label="Toggle kiln grid" size="sm" variant={kilnGridVisible ? "filled" : "light"} onClick={onToggleKilnGrid}>G</ActionIcon>
+            </Tooltip>
+          </>
         )}
         <Tooltip label="Inspection observations">
           <ActionIcon
