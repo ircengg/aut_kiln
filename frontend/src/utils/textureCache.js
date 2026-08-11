@@ -1,6 +1,6 @@
 import { Texture } from 'pixi.js';
 import { getElevationBands } from './elevationBands';
-import { getThicknessRgba } from './heatmap';
+import { getThicknessRgba, getWallLossRgba } from './heatmap';
 import { isSpotInspection } from './inspectionType';
 import { isHorizontalLayout } from './layout';
 import { getDisplayValue } from './measurements';
@@ -10,18 +10,6 @@ const SLOT_PIXELS = 10;
 const MAX_TEXTURE_HEIGHT = 8192;
 const MUTED_COLOR = [188, 194, 202, 140];
 const SPOT_TUBE_COLOR = [132, 143, 148, 190];
-const WALL_LOSS_COLORS = {
-  low: [0, 255, 0, 255],
-  medium: [255, 255, 0, 255],
-  high: [204, 102, 0, 255],
-};
-
-function getWallLossColor(value) {
-  if (value < 10) return WALL_LOSS_COLORS.low;
-  if (value <= 20) return WALL_LOSS_COLORS.medium;
-
-  return WALL_LOSS_COLORS.high;
-}
 
 function getScaleRange(wallData, mode, displayRange) {
   if (Number.isFinite(displayRange?.min) && Number.isFinite(displayRange?.max)) {
@@ -134,7 +122,7 @@ function buildCanvasTexture(wallData, focusRange, mode, displayRange) {
         value <= (focusRange?.max ?? scaleRange.max);
       const [red, green, blue, alpha] = isInFocus
         ? mode === 'wallLoss'
-          ? getWallLossColor(value)
+          ? getWallLossRgba(value)
           : getThicknessRgba(value, scaleRange.min, scaleRange.max)
         : MUTED_COLOR;
 

@@ -4,7 +4,6 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   colorRangeAtom,
-  displayModeAtom,
   inspectionsAtom,
   panAtom,
   selectedCellAtom,
@@ -20,6 +19,7 @@ import { isHorizontalLayout } from '../utils/layout';
 import ComparisonModal from './ComparisonModal';
 import ObservationsModal from './ObservationsModal';
 import PixiCanvas from './PixiCanvas';
+import KilnCanvas from './KilnCanvas';
 import Toolbar from './Toolbar';
 
 const easeOutCubic = (value) => 1 - (1 - value) ** 3;
@@ -33,12 +33,16 @@ function WallViewer({ inspection }) {
   const [pan, setPan] = useAtom(panAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
   const [selectedCell, setSelectedCell] = useAtom(selectedCellAtom);
-  const [displayMode, setDisplayMode] = useAtom(displayModeAtom);
+  const displayMode = 'wallLoss';
   const [focusIndex, setFocusIndex] = useState(-1);
   const [isFocusPlaying, setIsFocusPlaying] = useState(false);
   const [observationsOpened, setObservationsOpened] = useState(false);
   const [comparisonOpened, setComparisonOpened] = useState(false);
   const cameraFrameRef = useRef(null);
+  const kilnRef = useRef(null);
+  const [corrosionExaggeration, setCorrosionExaggeration] = useState(1);
+  const [kilnRotating, setKilnRotating] = useState(true);
+  const [corrosionReveal, setCorrosionReveal] = useState(1);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const wallConfig = useMemo(
@@ -54,6 +58,7 @@ function WallViewer({ inspection }) {
     [rawWallData, selectedCoil],
   );
   const isHorizontal = isHorizontalLayout(wallData?.layout);
+  const isKiln = inspection?.assetType === 'kiln' || wallData?.assetType === 'kiln';
   const lengthLabel = isHorizontal ? 'Distance' : 'Elevation';
   const coilOptions = useMemo(
     () =>
@@ -113,6 +118,20 @@ function WallViewer({ inspection }) {
   }, [inspection?.id, selectedCoil, selectedWall, setSelectedCell]);
 
   useEffect(() => {
+    if (!isKiln) return undefined;
+    setCorrosionReveal(0.02);
+    const started = performance.now();
+    let frame;
+    const animate = (now) => {
+      const progress = Math.min((now - started) / 850, 1);
+      setCorrosionReveal(easeOutCubic(progress));
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [inspection?.id, isKiln, selectedWall]);
+
+  useEffect(() => {
     if (!isFocusPlaying || !focusAreas.length) return undefined;
 
     const timer = window.setInterval(() => {
@@ -125,12 +144,9 @@ function WallViewer({ inspection }) {
   useEffect(() => {
     if (!focusedArea || !width || !canvasHeight) return undefined;
 
-    if (displayMode !== 'wallLoss') {
-      setDisplayMode('wallLoss');
-      return undefined;
-    }
-
     setColorRange({ min: 20, max: Math.max(displayRange.max ?? focusedArea.maxWallLoss, 20.001) });
+
+    if (isKiln) return undefined;
 
     const pitch = wallData.tubePitch || wallData.tubeDiameter || 1;
     const tubeAreaSpan = Math.max((focusedArea.maxTube - focusedArea.minTube + 1) * pitch, pitch);
@@ -195,12 +211,12 @@ function WallViewer({ inspection }) {
     focusedArea,
     isHorizontal,
     setColorRange,
-    setDisplayMode,
     setPan,
     setZoom,
     wallData?.tubeDiameter,
     wallData?.tubePitch,
     width,
+    isKiln,
   ]);
 
   const showNextFocus = () => {
@@ -277,17 +293,39 @@ function WallViewer({ inspection }) {
         onOpenComparison={() => setComparisonOpened(true)}
         canCompare={Boolean(selectedCell?.wall === selectedWall)}
         lengthLabel={lengthLabel}
+        isKiln={isKiln}
+        corrosionExaggeration={corrosionExaggeration}
+        onCorrosionExaggeration={setCorrosionExaggeration}
+        kilnRotating={kilnRotating}
+        onToggleKilnRotation={() => setKilnRotating((value) => !value)}
+        onFit3d={() => kilnRef.current?.fit()}
+        onReset3d={() => kilnRef.current?.reset()}
       />
-      <PixiCanvas
-        inspection={inspection}
-        wallData={wallData}
-        bounds={bounds}
-        size={size}
-        colorRange={colorRange}
-        displayMode={displayMode}
-        displayRange={displayRange}
-        focusedArea={focusedArea}
-      />
+      {isKiln ? (
+        <KilnCanvas
+          ref={kilnRef}
+          inspection={inspection}
+          wallData={wallData}
+          colorRange={colorRange}
+          displayMode={displayMode}
+          displayRange={displayRange}
+          focusedArea={focusedArea}
+          exaggeration={corrosionExaggeration}
+          rotating={kilnRotating}
+          reveal={corrosionReveal}
+        />
+      ) : (
+        <PixiCanvas
+          inspection={inspection}
+          wallData={wallData}
+          bounds={bounds}
+          size={size}
+          colorRange={colorRange}
+          displayMode={displayMode}
+          displayRange={displayRange}
+          focusedArea={focusedArea}
+        />
+      )}
       <ObservationsModal
         opened={observationsOpened}
         onClose={() => setObservationsOpened(false)}

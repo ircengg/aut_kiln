@@ -7,12 +7,14 @@ function Tooltip({ cell }) {
   return (
     <Paper className="canvas-tooltip" shadow="md" p="xs" withBorder style={{ left: cell.screenX + 8, top: cell.screenY + 8 }}>
       <Text size="xs" fw={700}>
-        Tube {cell.tube}
+        {cell.section ? `Section ${cell.section}` : `Tube ${cell.tube}`}
       </Text>
       {cell.coil && <Text size="xs">Coil {cell.coil}</Text>}
       <Text size="xs">
         {cell.lengthLabel || 'Elevation'} {cell.elevation} mm
       </Text>
+      {Number.isFinite(cell.axial) && <Text size="xs">Axial {cell.axial} mm</Text>}
+      {Number.isFinite(cell.angle) && <Text size="xs">Angle {(cell.angle * 180 / Math.PI).toFixed(1)}°</Text>}
       <Text size="xs">Thickness {formatMeasurement(cell.thickness, 'thickness')}</Text>
       {cell.displayMode === 'wallLoss' && (
         <Text size="xs">

@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Group,
   RangeSlider,
-  SegmentedControl,
   Select,
   Text,
   Tooltip,
@@ -11,7 +10,6 @@ import { useAtom, useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
 import {
   colorRangeAtom,
-  displayModeAtom,
   panAtom,
   selectedCellAtom,
   zoomAtom,
@@ -39,10 +37,17 @@ function Toolbar({
   onOpenComparison,
   canCompare = false,
   lengthLabel = "Elevation",
+  isKiln = false,
+  corrosionExaggeration = 1,
+  onCorrosionExaggeration,
+  kilnRotating = false,
+  onToggleKilnRotation,
+  onFit3d,
+  onReset3d,
 }) {
   const [zoom, setZoom] = useAtom(zoomAtom);
   const [colorRange, setColorRange] = useAtom(colorRangeAtom);
-  const [displayMode, setDisplayMode] = useAtom(displayModeAtom);
+  const displayMode = 'wallLoss';
   const setPan = useSetAtom(panAtom);
   const setSelectedCell = useSetAtom(selectedCellAtom);
   const hasRange =
@@ -62,11 +67,15 @@ function Toolbar({
   const focusCount = focusAreas.length;
   const isSpotFocus = focusedArea?.kind === "spot" || focusAreas[0]?.kind === "spot";
   const focusSummary = focusedArea
-    ? isSpotFocus
+    ? isKiln
+      ? `Area ${focusIndex + 1}/${focusCount} | Axial ${Math.round(focusedArea.minAxial)}-${Math.round(focusedArea.maxAxial)} mm | Circumference ${Math.round(focusedArea.minCircumference)}-${Math.round(focusedArea.maxCircumference)} mm | Angle ${focusedArea.minAngleDegrees.toFixed(1)}°-${focusedArea.maxAngleDegrees.toFixed(1)}° | Max loss ${focusedArea.maxWallLoss.toFixed(1)}% | Min ${focusedArea.minThickness.toFixed(2)} mm`
+      : isSpotFocus
       ? `Spot ${focusIndex + 1}/${focusCount} | Tube ${focusedArea.minTube} | ${lengthLabel} ${Math.round(focusedArea.centerElevation)} mm | Wall loss ${focusedArea.maxWallLoss.toFixed(1)}% | ${focusedArea.minThickness.toFixed(2)} mm`
       : `Area ${focusIndex + 1}/${focusCount} | Tubes ${focusedArea.minTube}-${focusedArea.maxTube} | ${lengthLabel} ${Math.round(focusedArea.minElevation)}-${Math.round(focusedArea.maxElevation)} mm | Max ${focusedArea.maxWallLoss.toFixed(1)}% | Min ${focusedArea.minThickness.toFixed(2)} mm`
     : focusCount
-      ? isSpotFocus
+      ? isKiln
+        ? `${focusCount} kiln corrosion areas > 20% wall loss`
+        : isSpotFocus
         ? `${focusCount} critical spots > 20%`
         : `${focusCount} high wall-loss areas > 20%`
       : isSpotFocus
@@ -84,12 +93,14 @@ function Toolbar({
   }, [sliderMax, sliderMin]);
 
   const fit = () => {
+    if (isKiln) { onFit3d?.(); return; }
     const next = fitViewToSize(bounds, size);
     setZoom(next.zoom);
     setPan(next.pan);
   };
 
   const reset = () => {
+    if (isKiln) { onReset3d?.(); setSelectedCell(null); return; }
     setZoom(1);
     setPan({ x: 24, y: 24 });
     setSelectedCell(null);
@@ -108,15 +119,7 @@ function Toolbar({
             ⌂
           </ActionIcon>
         </Tooltip> */}
-        <SegmentedControl
-          size="xs"
-          value={displayMode}
-          onChange={setDisplayMode}
-          data={[
-            { label: "Wall Loss %", value: "wallLoss" },
-            { label: "Thickness", value: "thickness" },
-          ]}
-        />
+        <Text size="xs" fw={800} className="wall-loss-mode-label">Wall Loss %</Text>
         {coilOptions.length > 0 && (
           <Select
             aria-label="Select coil"
@@ -170,6 +173,13 @@ function Toolbar({
             ↺
           </ActionIcon>
         </Tooltip>
+        {isKiln && (
+          <Tooltip label={kilnRotating ? "Pause kiln rotation" : "Rotate kiln"}>
+            <ActionIcon aria-label="Toggle kiln rotation" size="sm" variant={kilnRotating ? "filled" : "light"} onClick={onToggleKilnRotation}>
+              {kilnRotating ? "II" : "R"}
+            </ActionIcon>
+          </Tooltip>
+        )}
         <Tooltip label="Inspection observations">
           <ActionIcon
             aria-label="Inspection observations"
@@ -234,6 +244,22 @@ function Toolbar({
         </Group>
       </Group>
       <Group gap="sm" className="toolbar-range">
+        {isKiln && (
+          <Group gap={6} wrap="nowrap">
+            <Text size="xs" c="dimmed">Corrosion {corrosionExaggeration.toFixed(0)}x</Text>
+            <RangeSlider
+              min={0}
+              max={50}
+              step={1}
+              value={[0, corrosionExaggeration]}
+              onChange={(value) => onCorrosionExaggeration?.(value[1])}
+              minRange={0}
+              w={110}
+              size="xs"
+              label={(value) => `${value}x`}
+            />
+          </Group>
+        )}
         <Text size="xs" className="focus-summary" title={focusSummary}>
           {focusSummary}
         </Text>

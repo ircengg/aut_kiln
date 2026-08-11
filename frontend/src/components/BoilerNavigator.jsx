@@ -19,7 +19,7 @@ function getWallClass(sectionName) {
   return '';
 }
 
-function BoilerNavigator() {
+function KilnNavigator() {
   const inspections = useAtomValue(inspectionsAtom);
   const [selectedInspection, setSelectedInspection] = useAtom(selectedInspectionAtom);
   const [selectedWall, setSelectedWall] = useAtom(selectedWallAtom);
@@ -63,7 +63,7 @@ function BoilerNavigator() {
       <div className="boiler-nav-header">
         <div>
           <Text size="xs" fw={700} tt="uppercase" className="signal-text">
-            Boiler Navigation
+            Kiln Navigation
           </Text>
           <Title order={1}>Choose the inspection component.</Title>
         </div>
@@ -117,7 +117,7 @@ function BoilerNavigator() {
               <div className="core-ring" />
               <div className="core-pulse" />
               <Text size="xs" fw={700}>
-                Boiler
+                Kiln
               </Text>
             </div>
           </div>
@@ -142,7 +142,7 @@ function BoilerNavigator() {
               Back
             </Button>
             <Text size="xs" c="dimmed">
-              Click a component with sheet data to launch the heatmap.
+              Click a kiln section with sheet data to launch the 3D heatmap.
             </Text>
           </Group>
         </Stack>
@@ -151,4 +151,4 @@ function BoilerNavigator() {
   );
 }
 
-export default BoilerNavigator;
+export default KilnNavigator;

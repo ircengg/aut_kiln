@@ -8,7 +8,6 @@ import {
 } from "@mantine/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef, useState } from "react";
-import BoilerNavigator from "../components/BoilerNavigator";
 import Sidebar from "../components/Sidebar";
 import WelcomeExperience from "../components/WelcomeExperience";
 import WallViewer from "../components/WallViewer";
@@ -97,14 +96,6 @@ function Home() {
     );
   }
 
-  if (appView === "boiler") {
-    return (
-      <main className="full-page-shell">
-        <BoilerNavigator />
-      </main>
-    );
-  }
-
   return (
     <AppShell
       navbar={{ width: 300, breakpoint: "sm" }}
@@ -129,7 +120,9 @@ function Home() {
             Component: {inspection?.walls?.[selectedWall]?.name || selectedWall}
           </Text>
           {hoverCell?.coil && <Text size="xs">Coil: {hoverCell.coil}</Text>}
-          <Text size="xs">Tube: {hoverCell?.tube ?? "-"}</Text>
+          <Text size="xs">
+            {inspection?.assetType === 'kiln' ? 'Axial' : 'Tube'}: {inspection?.assetType === 'kiln' ? (hoverCell?.axial ?? '-') : (hoverCell?.tube ?? '-')}{inspection?.assetType === 'kiln' ? ' mm' : ''}
+          </Text>
           <Text size="xs">
             {hoverCell?.lengthLabel || "Elevation"}: {hoverCell?.elevation ?? "-"} mm
           </Text>

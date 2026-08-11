@@ -23,13 +23,23 @@ function getHighWallLossCells(wallData) {
       const wallLoss = getDisplayValue(thickness, 'wallLoss', wallData.tubeNominal);
 
       if (Number.isFinite(wallLoss) && wallLoss > HIGH_WALL_LOSS_LIMIT) {
+        const sourceAxial = tubeNumbers[dataTubeIndex] ?? dataTubeIndex + 1;
+        const localAxial = wallData.axialCoordinatesAbsolute
+          ? sourceAxial - (wallData.axialStart || 0)
+          : sourceAxial;
+        const fraction = Math.min(1, Math.max(0, localAxial / Math.max(wallData.axialLength || 1, 1)));
+        const radius = (wallData.radiusStart || 1) +
+          ((wallData.radiusEnd || wallData.radiusStart || 1) - (wallData.radiusStart || 1)) * fraction;
         cells.push({
           rowIndex,
           dataTubeIndex,
-          tube: tubeNumbers[dataTubeIndex] ?? dataTubeIndex + 1,
+          tube: sourceAxial,
           elevation: wallData.elevations[rowIndex],
           thickness,
           wallLoss,
+          assetType: wallData.assetType,
+          radius: wallData.radiusStart || 1,
+          angleDegrees: THREE_RAD_TO_DEG * wallData.elevations[rowIndex] / radius,
         });
       }
     }
@@ -62,7 +72,7 @@ function summarizeArea(cells, bands, index) {
     totalWallLoss += cell.wallLoss;
   });
 
-  return {
+  const area = {
     id: `corrosion-${index}`,
     kind: cells.length === 1 && cells[0].kind === 'spot' ? 'spot' : 'area',
     cells,
@@ -79,7 +89,22 @@ function summarizeArea(cells, bands, index) {
     centerTube: (minTube + maxTube) / 2,
     centerElevation: (minLower + maxUpper) / 2,
   };
+
+  if (cells[0]?.assetType === 'kiln') {
+    area.minAxial = minTube;
+    area.maxAxial = maxTube;
+    area.centerAxial = (minTube + maxTube) / 2;
+    area.minCircumference = minElevation;
+    area.maxCircumference = maxElevation;
+    area.centerCircumference = (minLower + maxUpper) / 2;
+    area.minAngleDegrees = Math.min(...cells.map((cell) => cell.angleDegrees));
+    area.maxAngleDegrees = Math.max(...cells.map((cell) => cell.angleDegrees));
+  }
+
+  return area;
 }
+
+const THREE_RAD_TO_DEG = 180 / Math.PI;
 
 export function getCorrodedAreas(wallData) {
   const highCells = getHighWallLossCells(wallData);

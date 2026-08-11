@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { WALL_LABELS, WALLS } from '../state/inspectionAtoms';
+import { WALL_LABELS, WALLS } from '../state/inspectionAtoms.js';
 
 const DETAIL_KEYS = {
   title: 'inspectionName',
@@ -29,7 +29,7 @@ const toNumber = (value) => {
 
 const toReadingNumber = (value) => {
   const number = Number(value);
-  return Number.isFinite(number) && number !== 0 ? number : null;
+  return Number.isFinite(number) && value !== null && value !== '' ? number : null;
 };
 
 const formatDateParts = (year, month, day) =>
@@ -42,8 +42,11 @@ function formatInspectionDate(value) {
 
   const serial = Number(value);
   if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
-    const parsed = XLSX.SSF.parse_date_code(serial);
-    if (parsed) return formatDateParts(parsed.y, parsed.m, parsed.d);
+    const excelEpoch = Date.UTC(1899, 11, 30);
+    const parsed = new Date(excelEpoch + Math.floor(serial) * 86400000);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatDateParts(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+    }
   }
 
   return String(value ?? '').trim();
@@ -169,6 +172,72 @@ function parseDetails(workbook) {
   }
 
   return details;
+}
+
+function parseKilnProject(workbook) {
+  const sheetName = findSheetName(workbook, 'Project') || findSheetName(workbook, 'Details');
+  const rows = readSheetRows(workbook, sheetName);
+  const fields = Object.fromEntries(
+    rows.map((row) => [normalize(row[0]), row[1]]).filter(([key]) => key),
+  );
+
+  return {
+    inspectionName: String(fields.asset || fields['project id'] || 'Inspection'),
+    inspectionDate: formatInspectionDate(fields['inspection date']),
+    rotationReference: String(fields['rotation reference'] || '0° Top'),
+    coordinateSystem: String(fields['coordinate system'] || 'Kiln Axis'),
+    note: String(fields.note || '').trim(),
+  };
+}
+
+function parseKilnGeometry(workbook) {
+  const sheetName = findSheetName(workbook, 'Geometry') || findSheetName(workbook, 'Details');
+  const rows = readSheetRows(workbook, sheetName).filter((row) =>
+    row.some((cell) => cell !== null && cell !== ''),
+  );
+  if (rows.length < 2) return [];
+
+  const headerIndex = rows.findIndex((row) => {
+    const labels = row.map(normalize);
+    return labels.includes('section') && labels.includes('type') &&
+      labels.includes('d1') && labels.includes('d2') &&
+      labels.includes('start') && labels.includes('length');
+  });
+  if (headerIndex < 0) return [];
+
+  const headerMap = getHeaderMap(rows[headerIndex]);
+  if (headerMap.section === undefined || headerMap.length === undefined) return [];
+
+  return rows.slice(headerIndex + 1).map((row) => {
+    const name = String(row[headerMap.section] ?? '').trim();
+    if (!name) return null;
+    const diameterStart = toNumber(row[headerMap.d1]);
+    const diameterEnd = toNumber(row[headerMap.d2]) ?? diameterStart;
+    const length = toNumber(row[headerMap.length]);
+    const start = toNumber(row[headerMap.start]) ?? 0;
+    const nominal = toNumber(row[headerMap['nominal thickness']]);
+
+    return {
+      id: name,
+      name,
+      assetType: 'kiln',
+      geometryType: String(row[headerMap.type] || 'CYLINDER').toUpperCase(),
+      diameterStart,
+      diameterEnd,
+      radiusStart: diameterStart === null ? null : diameterStart / 2,
+      radiusEnd: diameterEnd === null ? null : diameterEnd / 2,
+      axialStart: start,
+      axialLength: length,
+      layout: 'Kiln surface',
+      tubeDiameter: null,
+      tubeNominal: nominal,
+      tubeLength: diameterStart === null ? null : Math.PI * diameterStart,
+      tubePitch: null,
+      tubeCount: null,
+      coils: null,
+      inspectionType: 'Mapping',
+    };
+  }).filter(Boolean);
 }
 
 function splitMediaList(value) {
@@ -310,6 +379,37 @@ function parseSectionSheet(workbook, section) {
     return labels.some((label) => label.includes('tube')) || row.slice(1).some((cell) => Number.isFinite(Number(cell)));
   });
   const header = rows[Math.max(headerIndex, 0)] || [];
+  if (section.assetType === 'kiln') {
+    const axialPositions = header.slice(1).map(toNumber);
+    const validColumns = axialPositions
+      .map((axial, index) => ({ axial, index: index + 1 }))
+      .filter(({ axial }) => axial !== null);
+    const parsedRows = rows.slice(Math.max(headerIndex, 0) + 1).map((row) => {
+      const circumference = toNumber(row[0]);
+      if (circumference === null) return null;
+      return {
+        elevation: circumference,
+        coilNumber: null,
+        values: validColumns.map(({ index }) => toReadingNumber(row[index])),
+      };
+    }).filter(Boolean);
+    const data = buildDataSet(section, validColumns.map(({ axial }) => axial), parsedRows);
+    return {
+      ...data,
+      sheetName,
+      assetType: 'kiln',
+      circumferencePositions: data.elevations,
+      axialPositions: data.tubeNumbers,
+      axialCoordinatesAbsolute: data.tubeNumbers.length > 0 && data.tubeNumbers.every(
+        (axial) => axial >= section.axialStart && axial <= section.axialStart + section.axialLength,
+      ),
+      axialMin: data.tubeNumbers.length ? Math.min(...data.tubeNumbers) : 0,
+      axialMax: data.tubeNumbers.length ? Math.max(...data.tubeNumbers) : section.axialLength,
+      coilNumbers: [],
+      coilData: {},
+      hasCoils: false,
+    };
+  }
   const { coilColumnIndex, tubeStartIndex, tubeNumbers } = getSheetShape(header);
   const dataRows = rows.slice(Math.max(headerIndex, 0) + 1);
   const parsedRows = [];
@@ -380,7 +480,11 @@ export function getSectionDataForCoil(sectionData, coilNumber) {
 export async function parseInspection(source) {
   const buffer = await readSourceBuffer(source);
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
-  const details = parseDetails(workbook);
+  const kilnSections = parseKilnGeometry(workbook);
+  const kilnProject = kilnSections.length ? parseKilnProject(workbook) : null;
+  const details = kilnSections.length
+    ? { ...kilnProject, sections: kilnSections }
+    : parseDetails(workbook);
   const observations = parseSummarySheet(workbook);
   const observationsBySection = new Map();
   observations.forEach((observation) => {
@@ -404,6 +508,10 @@ export async function parseInspection(source) {
     fileName: sourceName,
     inspectionDate: details.inspectionDate,
     inspectionName: details.inspectionName || sourceName,
+    assetType: kilnSections.length ? 'kiln' : 'boiler',
+    rotationReference: details.rotationReference,
+    coordinateSystem: details.coordinateSystem,
+    note: details.note || '',
     sections,
     availableSections,
     observations,

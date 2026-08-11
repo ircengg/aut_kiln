@@ -41,12 +41,12 @@ function Sidebar() {
           <div>
             <Title order={3}>IRC Engineering</Title>
             <Text size="xs" c="dimmed">
-              AUT Command
+              Kiln Intelligence
             </Text>
           </div>
         </div>
         <Text size="xs" c="dimmed">
-          Boiler wall intelligence
+          Rotary kiln thickness intelligence
         </Text>
       </div>
 

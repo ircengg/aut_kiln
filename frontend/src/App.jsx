@@ -21,7 +21,7 @@ function App() {
   const isAdmin = path.startsWith('/admin') || path.startsWith('/ircengg');
 
   return (
-    <MantineProvider defaultColorScheme="dark">
+    <MantineProvider defaultColorScheme="light">
       {isAdmin ? <Admin /> : <Home />}
     </MantineProvider>
   );

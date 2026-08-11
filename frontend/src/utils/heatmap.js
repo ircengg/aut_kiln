@@ -10,6 +10,13 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const mix = (a, b, t) => Math.round(a + (b - a) * t);
 
+export function getWallLossRgba(value) {
+  if (!Number.isFinite(value)) return [215, 220, 226, 255];
+  if (value < 10) return [0, 255, 0, 255];
+  if (value <= 20) return [255, 255, 0, 255];
+  return [204, 102, 0, 255];
+}
+
 export function getThicknessColor(value, min, max) {
   const color = getThicknessRgba(value, min, max);
 
